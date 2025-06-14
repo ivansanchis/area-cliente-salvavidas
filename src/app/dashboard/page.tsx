@@ -109,27 +109,31 @@ export default function DashboardPage() {
         {/* Próximas funcionalidades */}
         <Card>
           <CardHeader>
-            <CardTitle>Próximamente</CardTitle>
-            <CardDescription>Funcionalidades que implementaremos</CardDescription>
+            <CardTitle>Área de Cliente</CardTitle>
+            <CardDescription>Accede a tus servicios</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <h4 className="font-medium mb-2">Mis Servicios</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Dispositivos y ubicaciones</li>
-                  <li>• Mapa interactivo</li>
-                  <li>• Formaciones realizadas</li>
-                  <li>• Formación online</li>
+                <ul className="text-sm space-y-2">
+                  <li>
+                    <a href="/dashboard/dispositivos" className="text-blue-600 hover:underline">
+                      • Dispositivos y ubicaciones
+                    </a>
+                  </li>
+                  <li className="text-gray-500">• Mapa interactivo (próximamente)</li>
+                  <li className="text-gray-500">• Formaciones realizadas (próximamente)</li>
+                  <li className="text-gray-500">• Formación online (próximamente)</li>
                 </ul>
               </div>
               <div>
                 <h4 className="font-medium mb-2">Mis Contratos</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• Contratos activos</li>
-                  <li>• Histórico de facturas</li>
-                  <li>• Descargas y certificados</li>
-                  <li>• Contacto con asesores</li>
+                <ul className="text-sm space-y-2">
+                  <li className="text-gray-500">• Contratos activos (próximamente)</li>
+                  <li className="text-gray-500">• Histórico de facturas (próximamente)</li>
+                  <li className="text-gray-500">• Descargas y certificados (próximamente)</li>
+                  <li className="text-gray-500">• Contacto con asesores (próximamente)</li>
                 </ul>
               </div>
             </div>

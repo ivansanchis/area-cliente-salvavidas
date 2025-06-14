@@ -1,11 +1,9 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -14,6 +12,8 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
+        console.log('🔍 Authorize called with:', credentials?.email)
+        
         if (!credentials?.email || !credentials?.password) {
           return null
         }
@@ -25,6 +25,7 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user || !user.active) {
+          console.log('❌ User not found or inactive')
           return null
         }
 
@@ -34,9 +35,16 @@ export const authOptions: NextAuthOptions = {
         )
 
         if (!isPasswordValid) {
+          console.log('❌ Invalid password')
           return null
         }
-
+        
+        console.log('✅ Login successful for user:', {
+          email: user.email,
+          accessType: user.accessType,
+          accessId: user.accessId
+        })
+        
         return {
           id: user.id,
           email: user.email,
@@ -55,6 +63,9 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      console.log('🔧 JWT callback - user:', user)
+      console.log('🔧 JWT callback - token:', token)
+      
       if (user) {
         token.accessType = user.accessType
         token.accessId = user.accessId
@@ -65,6 +76,9 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
+      console.log('🔧 Session callback - token:', token)
+      console.log('🔧 Session callback - session before:', session)
+      
       if (session?.user) {
         session.user.id = token.sub!
         session.user.accessType = token.accessType as string
@@ -73,6 +87,8 @@ export const authOptions: NextAuthOptions = {
         session.user.canViewFormaciones = token.canViewFormaciones as boolean
         session.user.canViewFacturas = token.canViewFacturas as boolean
       }
+      
+      console.log('🔧 Session callback - session after:', session)
       return session
     }
   },
@@ -80,4 +96,5 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: true,
 }
