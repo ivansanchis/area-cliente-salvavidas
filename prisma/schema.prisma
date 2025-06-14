@@ -1,0 +1,223 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Tabla de usuarios para autenticación
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  
+  // Tipo de acceso: "grupo", "empresa", "dispositivo"
+  accessType String
+  
+  // ID del recurso al que tiene acceso (grupo, empresa o dispositivo)
+  accessId   String
+  
+  // Permisos específicos
+  canViewContratos    Boolean @default(true)
+  canViewFormaciones  Boolean @default(true)
+  canViewFacturas     Boolean @default(true)
+  
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de grupos (basada en Power BI)
+model Grupo {
+  id               String @id @default(cuid())
+  idGrupo          String @unique // ID de Grupo de Power BI
+  nombre           String @unique // Nombre del Grupo - ahora único
+  numeroEquipos    Int            // Número de Equipos
+  numeroFormaciones Int           // Número de Formaciones
+  mrrTotal         Float          // MRR Total (Monthly Recurring Revenue)
+  cuotaMediaEquipo Float          // Cuota Media por Equipo
+  
+  // Relaciones
+  empresas     Empresa[]
+  contratos    Contrato[]
+  dispositivos Dispositivo[]
+  formaciones  Formacion[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de empresas (basada en Power BI)
+model Empresa {
+  id                String @id @default(cuid())
+  idSage            String @unique // Id Sage
+  idGrupo           String         // ID de Grupo
+  nombreCliente     String         // Nombre Cliente
+  numeroEquipos     Int            // Nº Equipos
+  numeroFormaciones Int            // Nº Formaciones
+  mrr               Float          // MRR
+  cuotaEquipo       Float          // Cuota / Equipo
+  
+  // Relaciones
+  grupo        Grupo         @relation(fields: [idGrupo], references: [idGrupo])
+  contratos    Contrato[]
+  dispositivos Dispositivo[]
+  formaciones  Formacion[]
+  facturas     Factura[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de contratos (basada en Power BI)
+model Contrato {
+  id                    String    @id @default(cuid())
+  idContrato            String    @unique // ID de Contrato
+  idGrupo               String           // ID de Grupo
+  grupoCliente          String           // Grupo Cliente
+  estadoContrato        String           // Estado del Contrato
+  idSage                String           // ID SAGE
+  cif                   String           // CIF
+  nombreClienteSage     String           // Nombre Cliente SAGE
+  fechaInicio           DateTime         // Fecha de Inicio
+  fechaFinalizacion     DateTime?        // Fecha de Finalización
+  contratoSage          String           // Contrato SAGE
+  periodoFacturacion    String           // Periodo de Facturación
+  formaPago             String           // Forma de Pago
+  descripcion           String?          // Descripción
+  mrr                   Float            // MRR
+  numeroEquipos         Int              // Número de Equipos
+  cuotaMediaEquipo      Float            // Cuota Media por Equipo
+  ultimaFactura         DateTime?        // Última Factura
+  ultimoCobro           DateTime?        // Último Cobro
+  
+  // Relaciones
+  grupo        Grupo         @relation(fields: [idGrupo], references: [idGrupo])
+  empresa      Empresa       @relation(fields: [idSage], references: [idSage])
+  dispositivos Dispositivo[]
+  facturas     Factura[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de dispositivos (basada en Power BI)
+model Dispositivo {
+  id               String    @id @default(cuid())
+  numeroSerie      String    @unique // # Serie
+  idContrato       String           // ID Contrato
+  idSage           String           // ID SAGE
+  grupoCliente     String           // Grupo Cliente
+  nombreCliente    String           // Nombre Cliente
+  contratoSage     String           // Contrato Sage
+  espacio          String           // Espacio
+  provincia        String           // Provincia
+  linkInforme      String?          // Link a Informe
+  linkAudit        String?          // Link a Audit
+  fechaInstalacion DateTime         // Fecha Instal
+  fechaRevision    DateTime         // Fecha Revis
+  edLink           String?          // Ed
+  altaLink         String?          // Alta
+  latitud          Float?           // Lat
+  longitud         Float?           // Lng
+  contratoSoslink  String?          // Contrato Soslink
+  cancelacion      String?          // Canc
+  situacion        String           // Situación
+  idUbicacion      String?          // ID Ubic
+  numeroPedido     String?          // # Ped
+  
+  // Relaciones
+  grupo    Grupo    @relation(fields: [grupoCliente], references: [nombre])
+  empresa  Empresa  @relation(fields: [idSage], references: [idSage])
+  contrato Contrato @relation(fields: [idContrato], references: [idContrato])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de formaciones (basada en Power BI)
+model Formacion {
+  id               String    @id @default(cuid())
+  idFormacion      String    @unique // Id formación
+  instructor       String           // Instructor
+  estado           String           // Estado
+  tipoFormacion    String           // Tipo Formación
+  ccaa             String           // CCAA
+  fechaRealizacion DateTime         // start_at
+  horaInicio       String           // start_time_at
+  direccion        String           // Address
+  codigoPostal     String           // Postal_code
+  ciudad           String           // Town
+  provincia        String           // Province
+  duracionTotal    Float            // hours_total
+  fundae           Boolean          // Fundae
+  centro           String           // Center
+  evaluacionInstructor Float?       // Evaluación Instructor
+  idCliente        String           // ID Cliente
+  grupoCliente     String           // Grupo Cliente
+  nombreClienteSage String          // Nombre Cliente SAGE
+  numeroPedido     String?          // Order_number
+  
+  // Relaciones
+  grupo   Grupo     @relation(fields: [grupoCliente], references: [nombre])
+  empresa Empresa   @relation(fields: [idCliente], references: [idSage])
+  alumnos Alumno[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de alumnos (basada en Power BI)
+model Alumno {
+  id          String @id @default(cuid())
+  idFormacion String        // Id Formación
+  nombre      String        // Nombre
+  dni         String        // DNI
+  diplomaUrl  String?       // Diploma
+  
+  // Relaciones
+  formacion Formacion @relation(fields: [idFormacion], references: [idFormacion])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de facturas (basada en Power BI)
+model Factura {
+  id              String    @id @default(cuid())
+  fechaFactura    DateTime         // Fecha Factura
+  numeroFactura   String    @unique // Factura
+  idContratoSage  String           // ID Contrato Sage
+  grupoCliente    String           // Grupo Cliente
+  cif             String           // CIF
+  nombreCliente   String           // Nombre Cliente
+  baseImponible   Float            // Base Imponible
+  estado          String           // Estado
+  fechaCobro      DateTime?        // Fecha Cobro
+  tipoServicio    String           // Tipo Servicio F
+  
+  // Relaciones
+  contrato Contrato @relation(fields: [idContratoSage], references: [idContrato])
+  empresa  Empresa  @relation(fields: [cif], references: [idSage])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tabla de asesores comerciales (basada en Power BI)
+model AsesorComercial {
+  id       String @id @default(cuid())
+  idSage   String @unique // Id Sage
+  nombre   String         // Propietario de la cuenta
+  email    String         // Correo electrónico
+  telefono String         // Teléfono
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
