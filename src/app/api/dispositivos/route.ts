@@ -7,57 +7,132 @@ export async function GET(request: NextRequest) {
     const session = await getSessionFromCookie()
     
     if (!session?.user) {
+      console.log('❌ No session found')
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    console.log('🔍 User access:', {
+    console.log('🔍 User session data:', {
       email: session.user.email,
+      role: session.user.role,
       accessType: session.user.accessType,
       accessId: session.user.accessId
     })
 
+    // Obtener datos adicionales del usuario desde la base de datos
+    const userData = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: {
+        role: true,
+        accessType: true,
+        accessId: true,
+        grupoAsignado: true,
+        empresaAsignada: true,
+        active: true
+      }
+    })
+
+    if (!userData || !userData.active) {
+      console.log('❌ User not found or inactive')
+      return NextResponse.json({ error: 'Usuario no encontrado o inactivo' }, { status: 403 })
+    }
+
+    console.log('📊 User data from DB:', userData)
+
     // Obtener dispositivos según el tipo de acceso del usuario
     let dispositivos
+    let whereCondition = {}
 
-    switch (session.user.accessType) {
+    switch (userData.accessType) {
+      case 'GRUPO':
       case 'grupo':
-        // El usuario puede ver todos los dispositivos de su grupo
-        dispositivos = await prisma.dispositivo.findMany({
-          where: {
-            grupoCliente: session.user.accessId
-          },
-          orderBy: {
-            fechaRevision: 'asc'
+        // CORRECCIÓN: Usar el nombre completo del grupo, no el ID
+        if (userData.grupoAsignado) {
+          // Usar el nombre completo del grupo asignado
+          whereCondition = { grupoCliente: userData.grupoAsignado }
+          console.log(`🔍 Searching devices for group: ${userData.grupoAsignado}`)
+        } else if (userData.accessId) {
+          // Fallback: buscar por accessId si no hay grupoAsignado
+          // Primero intentar obtener el nombre del grupo desde la tabla Grupo
+          const grupo = await prisma.grupo.findUnique({
+            where: { idGrupo: userData.accessId },
+            select: { nombre: true }
+          })
+          
+          if (grupo) {
+            whereCondition = { grupoCliente: grupo.nombre }
+            console.log(`🔍 Searching devices for group (via ID lookup): ${grupo.nombre}`)
+          } else {
+            // Último recurso: usar directamente el accessId
+            whereCondition = { grupoCliente: userData.accessId }
+            console.log(`🔍 Searching devices for group (direct): ${userData.accessId}`)
           }
-        })
+        }
         break
 
+      case 'EMPRESA':
       case 'empresa':
-        // El usuario puede ver solo dispositivos de su empresa
-        dispositivos = await prisma.dispositivo.findMany({
-          where: {
-            nombreCliente: session.user.accessId
-          },
-          orderBy: {
-            fechaRevision: 'asc'
-          }
-        })
+        // Para empresas, usar el nombre de la empresa
+        if (userData.empresaAsignada) {
+          whereCondition = { nombreCliente: userData.empresaAsignada }
+          console.log(`🔍 Searching devices for company: ${userData.empresaAsignada}`)
+        } else if (userData.accessId) {
+          // Fallback: usar accessId
+          whereCondition = { nombreCliente: userData.accessId }
+          console.log(`🔍 Searching devices for company (direct): ${userData.accessId}`)
+        }
         break
 
+      case 'DISPOSITIVO':
       case 'dispositivo':
-        // El usuario puede ver solo un dispositivo específico
-        dispositivos = await prisma.dispositivo.findMany({
-          where: {
-            numeroSerie: session.user.accessId
-          }
-        })
+        // Para dispositivos específicos, usar número de serie
+        whereCondition = { numeroSerie: userData.accessId }
+        console.log(`🔍 Searching specific device: ${userData.accessId}`)
+        break
+
+      case 'ADMIN':
+      case 'admin':
+        // Administradores pueden ver todos los dispositivos
+        whereCondition = {}
+        console.log('🔍 Admin user - showing all devices')
         break
 
       default:
+        console.log(`❌ Invalid access type: ${userData.accessType}`)
         return NextResponse.json({ error: 'Tipo de acceso no válido' }, { status: 403 })
     }
 
-    console.log(`📱 Found ${dispositivos.length} dispositivos for user`)
+    console.log('🔍 Where condition:', whereCondition)
+
+    // Ejecutar la consulta
+    dispositivos = await prisma.dispositivo.findMany({
+      where: whereCondition,
+      orderBy: {
+        fechaRevision: 'asc'
+      }
+    })
+
+    console.log(`📱 Found ${dispositivos.length} dispositivos for user ${session.user.email}`)
+
+    // Log de los dispositivos encontrados para debugging
+    if (dispositivos.length > 0) {
+      console.log('📱 Devices found:')
+      dispositivos.forEach(d => {
+        console.log(`  - ${d.numeroSerie}: ${d.espacio} (${d.grupoCliente})`)
+      })
+    } else {
+      console.log('❌ No devices found. Debugging info:')
+      console.log('   - User access type:', userData.accessType)
+      console.log('   - User access ID:', userData.accessId)
+      console.log('   - User grupo asignado:', userData.grupoAsignado)
+      console.log('   - Where condition used:', whereCondition)
+      
+      // Hacer una consulta de prueba para ver qué grupos existen
+      const allGroups = await prisma.dispositivo.findMany({
+        select: { grupoCliente: true },
+        distinct: ['grupoCliente']
+      })
+      console.log('   - Available group names in devices:', allGroups.map(g => g.grupoCliente))
+    }
 
     // Formatear fechas para el frontend
     const dispositivosFormateados = dispositivos.map(dispositivo => ({
@@ -79,7 +154,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(dispositivosFormateados)
 
   } catch (error) {
-    console.error('Error fetching dispositivos:', error)
+    console.error('❌ Error fetching dispositivos:', error)
     return NextResponse.json(
       { error: 'Error interno del servidor' }, 
       { status: 500 }
