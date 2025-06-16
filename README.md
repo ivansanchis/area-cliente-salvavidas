@@ -16,6 +16,16 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+### Environment variables
+
+Create a `.env.local` file and ensure the `NEXTAUTH_URL` value matches the origin used in the browser. For local development it usually is:
+
+```bash
+NEXTAUTH_URL=http://localhost:3000
+```
+
+If the URL does not match, admin API requests will respond with `401 Unauthorized` because the session cookie will not be sent correctly.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
