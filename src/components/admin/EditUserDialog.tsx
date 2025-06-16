@@ -102,8 +102,9 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
   const [dispositivos, setDispositivos] = useState<Dispositivo[]>([])
   const [dispositivosFiltrados, setDispositivosFiltrados] = useState<Dispositivo[]>([])
   const [loadingData, setLoadingData] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
-  // Efecto para cargar datos cuando se abre el modal
+  // CORRECCIÓN PRINCIPAL: Efecto para cargar datos cuando se abre el modal
   useEffect(() => {
     if (open && user) {
       console.log('🔍 Opening edit modal for user:', {
@@ -114,53 +115,63 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
         accessId: user.accessId
       })
       
-      // Primero cargar las opciones de los selectores
-      loadSelectData().then(() => {
-        // Después pre-poblar el formulario con los datos del usuario
-        const userData = {
-          email: user.email,
-          password: '',
-          nombre: user.nombre || '',
-          apellidos: user.apellidos || '',
-          grupoAsignado: user.grupoAsignado || '',
-          empresaAsignada: user.empresaAsignada || '',
-          tipoAcceso: user.accessType.toLowerCase(),
-          associatedId: user.accessId,
-          canViewContratos: user.canViewContratos,
-          canViewFormaciones: user.canViewFormaciones,
-          canViewFacturas: user.canViewFacturas,
-          active: user.active
-        }
-        
-        console.log('📝 Setting form data after loading options:', userData)
-        setFormData(userData)
-        setOriginalData(userData) // Guardar estado original
-      })
-      
+      // Reset estados
+      setDataLoaded(false)
       setChangePassword(false)
+      
+      // Cargar datos primero
+      loadSelectData()
+    }
+    
+    // Reset cuando se cierra
+    if (!open) {
+      setDataLoaded(false)
+      setFormData({
+        email: '',
+        password: '',
+        nombre: '',
+        apellidos: '',
+        grupoAsignado: '',
+        empresaAsignada: '',
+        tipoAcceso: '',
+        associatedId: '',
+        canViewContratos: true,
+        canViewFormaciones: true,
+        canViewFacturas: true,
+        active: true
+      })
+      setOriginalData(null)
     }
   }, [open, user])
 
-  // Efecto adicional para sincronizar los selectores después de que se carguen los datos
+  // CORRECCIÓN: Poblar formulario DESPUÉS de cargar datos
   useEffect(() => {
-    if (grupos.length > 0 && user && user.grupoAsignado && !formData.grupoAsignado) {
-      console.log('🔄 Syncing grupo selector with user data')
-      setFormData(prev => ({
-        ...prev,
-        grupoAsignado: user.grupoAsignado || ''
-      }))
+    if (dataLoaded && user && open) {
+      console.log('📝 Populating form with user data after data loaded')
+      
+      const userData = {
+        email: user.email,
+        password: '',
+        nombre: user.nombre || '',
+        apellidos: user.apellidos || '',
+        grupoAsignado: user.grupoAsignado || '',
+        empresaAsignada: user.empresaAsignada || '',
+        tipoAcceso: user.accessType.toLowerCase(),
+        associatedId: user.accessId,
+        canViewContratos: user.canViewContratos,
+        canViewFormaciones: user.canViewFormaciones,
+        canViewFacturas: user.canViewFacturas,
+        active: user.active
+      }
+      
+      console.log('📝 Setting form data:', userData)
+      console.log('📊 Available grupos:', grupos.map(g => g.nombre))
+      console.log('📊 Available empresas:', empresas.map(e => e.nombreCliente))
+      
+      setFormData(userData)
+      setOriginalData(userData)
     }
-  }, [grupos, user])
-
-  useEffect(() => {
-    if (empresas.length > 0 && user && user.empresaAsignada && !formData.empresaAsignada) {
-      console.log('🔄 Syncing empresa selector with user data')
-      setFormData(prev => ({
-        ...prev,
-        empresaAsignada: user.empresaAsignada || ''
-      }))
-    }
-  }, [empresas, user])
+  }, [dataLoaded, user, open, grupos, empresas])
 
   // Filtrar empresas cuando cambia el grupo asignado
   useEffect(() => {
@@ -208,6 +219,8 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
         setGrupos(gruposData)
       } else {
         console.error('❌ Error loading grupos:', gruposRes.status, gruposRes.statusText)
+        const errorText = await gruposRes.text()
+        console.error('❌ Error details:', errorText)
       }
 
       // Cargar empresas
@@ -219,6 +232,8 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
         setEmpresasFiltradas(empresasData)
       } else {
         console.error('❌ Error loading empresas:', empresasRes.status, empresasRes.statusText)
+        const errorText = await empresasRes.text()
+        console.error('❌ Error details:', errorText)
       }
 
       // Cargar dispositivos
@@ -233,6 +248,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
       }
       
       console.log('✅ All select data loaded successfully')
+      setDataLoaded(true)
       
     } catch (error) {
       console.error('❌ Error loading select data:', error)
@@ -406,6 +422,16 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
             </div>
           </div>
 
+          {/* DEBUG INFO */}
+          {!dataLoaded && (
+            <div className="bg-yellow-50 p-4 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-yellow-600" />
+                <span className="text-sm text-yellow-800">Cargando datos de selectores...</span>
+              </div>
+            </div>
+          )}
+
           {/* Datos personales */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-gray-900">Datos Personales</h3>
@@ -499,7 +525,12 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
             {/* Grupo y Empresa Asignados */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="grupoAsignado">Grupo Asignado *</Label>
+                <Label htmlFor="grupoAsignado">
+                  Grupo Asignado * 
+                  {dataLoaded && user.grupoAsignado && (
+                    <span className="text-xs text-gray-500"> (Actual: {user.grupoAsignado})</span>
+                  )}
+                </Label>
                 {loadingData ? (
                   <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
                     <span className="text-sm text-gray-500">Cargando...</span>
@@ -524,7 +555,12 @@ export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated
               </div>
 
               <div>
-                <Label htmlFor="empresaAsignada">Empresa Asignada</Label>
+                <Label htmlFor="empresaAsignada">
+                  Empresa Asignada
+                  {dataLoaded && user.empresaAsignada && (
+                    <span className="text-xs text-gray-500"> (Actual: {user.empresaAsignada})</span>
+                  )}
+                </Label>
                 {loadingData ? (
                   <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
                     <span className="text-sm text-gray-500">Cargando...</span>

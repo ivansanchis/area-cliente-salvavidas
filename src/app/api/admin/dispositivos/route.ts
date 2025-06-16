@@ -5,12 +5,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    const { isAdmin, userEmail, error } = await verifyAdminAccess()
+    console.log('🔍 GET /api/admin/dispositivos - Loading dispositivos for admin')
     
-    if (!isAdmin) {
-      console.log('❌ Admin access denied for dispositivos:', error)
-      return NextResponse.json({ error: error || 'Acceso denegado' }, { status: 401 })
+    const adminCheck = await verifyAdminAccess()
+    
+    if (!adminCheck.isValid) {
+      console.log('❌ Admin access denied for dispositivos:', adminCheck.error)
+      return NextResponse.json({ error: adminCheck.error || 'Acceso denegado' }, { status: 401 })
     }
+
+    console.log(`✅ Admin access verified for dispositivos: ${adminCheck.user?.email}`)
 
     // Obtener todos los dispositivos
     const dispositivos = await prisma.dispositivo.findMany({
@@ -37,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(dispositivos)
 
   } catch (error) {
-    console.error('Error fetching dispositivos:', error)
+    console.error('❌ Error fetching dispositivos:', error)
     return NextResponse.json(
       { error: 'Error interno del servidor' }, 
       { status: 500 }

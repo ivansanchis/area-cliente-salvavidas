@@ -5,12 +5,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    const { isAdmin, userEmail, error } = await verifyAdminAccess()
+    console.log('🔍 GET /api/admin/empresas - Loading empresas for admin')
     
-    if (!isAdmin) {
-      console.log('❌ Admin access denied for empresas:', error)
-      return NextResponse.json({ error: error || 'Acceso denegado' }, { status: 401 })
+    const adminCheck = await verifyAdminAccess()
+    
+    if (!adminCheck.isValid) {
+      console.log('❌ Admin access denied for empresas:', adminCheck.error)
+      return NextResponse.json({ error: adminCheck.error || 'Acceso denegado' }, { status: 401 })
     }
+
+    console.log(`✅ Admin access verified for empresas: ${adminCheck.user?.email}`)
 
     // Obtener todas las empresas
     const empresas = await prisma.empresa.findMany({
@@ -32,12 +36,12 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    console.log(`📊 Found ${empresas.length} empresas for admin selection`)
+    console.log(`📊 Found ${empresas.length} empresas for admin selection:`, empresas.map(e => e.nombreCliente))
 
     return NextResponse.json(empresas)
 
   } catch (error) {
-    console.error('Error fetching empresas:', error)
+    console.error('❌ Error fetching empresas:', error)
     return NextResponse.json(
       { error: 'Error interno del servidor' }, 
       { status: 500 }

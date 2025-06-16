@@ -5,12 +5,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    const { isAdmin, userEmail, error } = await verifyAdminAccess()
+    console.log('🔍 GET /api/admin/grupos - Loading grupos for admin')
     
-    if (!isAdmin) {
-      console.log('❌ Admin access denied for grupos:', error)
-      return NextResponse.json({ error: error || 'Acceso denegado' }, { status: 401 })
+    const adminCheck = await verifyAdminAccess()
+    
+    if (!adminCheck.isValid) {
+      console.log('❌ Admin access denied for grupos:', adminCheck.error)
+      return NextResponse.json({ error: adminCheck.error || 'Acceso denegado' }, { status: 401 })
     }
+
+    console.log(`✅ Admin access verified for grupos: ${adminCheck.user?.email}`)
 
     // Obtener todos los grupos
     const grupos = await prisma.grupo.findMany({
@@ -27,12 +31,12 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    console.log(`📊 Found ${grupos.length} grupos for admin selection`)
+    console.log(`📊 Found ${grupos.length} grupos for admin selection:`, grupos.map(g => g.nombre))
 
     return NextResponse.json(grupos)
 
   } catch (error) {
-    console.error('Error fetching grupos:', error)
+    console.error('❌ Error fetching grupos:', error)
     return NextResponse.json(
       { error: 'Error interno del servidor' }, 
       { status: 500 }

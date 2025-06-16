@@ -5,14 +5,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    const { isAdmin, userEmail, error } = await verifyAdminAccess()
+    console.log('🔍 GET /api/admin/users - Loading users for admin')
     
-    if (!isAdmin) {
-      console.log('❌ Admin access denied:', error)
-      return NextResponse.json({ error: error || 'Acceso denegado' }, { status: 401 })
+    const adminCheck = await verifyAdminAccess()
+    
+    if (!adminCheck.isValid) {
+      console.log('❌ Admin access denied:', adminCheck.error)
+      return NextResponse.json({ error: adminCheck.error || 'Acceso denegado' }, { status: 401 })
     }
 
-    console.log('🔍 Admin user accessing users list:', userEmail)
+    console.log(`✅ Admin access verified: ${adminCheck.user?.email}`)
 
     // Obtener todos los usuarios
     const users = await prisma.user.findMany({
@@ -25,6 +27,8 @@ export async function GET(request: NextRequest) {
         role: true,
         accessType: true,
         accessId: true,
+        grupoAsignado: true,    // ✅ ASEGURAR QUE INCLUYE ESTOS CAMPOS
+        empresaAsignada: true,  // ✅ ASEGURAR QUE INCLUYE ESTOS CAMPOS
         canViewContratos: true,
         canViewFormaciones: true,
         canViewFacturas: true,
@@ -54,7 +58,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(usersFormatted)
 
   } catch (error) {
-    console.error('Error fetching users:', error)
+    console.error('❌ Error fetching users:', error)
     return NextResponse.json(
       { error: 'Error interno del servidor' }, 
       { status: 500 }
@@ -64,11 +68,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { isAdmin, userEmail, error } = await verifyAdminAccess()
+    console.log('🔍 POST /api/admin/users - Creating new user')
     
-    if (!isAdmin) {
-      console.log('❌ Admin access denied for user creation:', error)
-      return NextResponse.json({ error: error || 'Acceso denegado' }, { status: 401 })
+    const adminCheck = await verifyAdminAccess()
+    
+    if (!adminCheck.isValid) {
+      console.log('❌ Admin access denied for user creation:', adminCheck.error)
+      return NextResponse.json({ error: adminCheck.error || 'Acceso denegado' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -77,8 +83,8 @@ export async function POST(request: NextRequest) {
       password, 
       nombre, 
       apellidos,
-      grupoAsignado,     // NUEVO
-      empresaAsignada,   // NUEVO
+      grupoAsignado,     
+      empresaAsignada,   
       role, 
       accessType, 
       accessId,
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validar campos requeridos
-    if (!email || !password || !nombre || !apellidos || !grupoAsignado || !role || !accessType || !accessId) {
+    if (!email || !password || !nombre || !apellidos || !role || !accessType || !accessId) {
       return NextResponse.json({ 
         error: 'Faltan campos requeridos' 
       }, { status: 400 })
@@ -123,8 +129,8 @@ export async function POST(request: NextRequest) {
         role,
         accessType,
         accessId,
-        grupoAsignado,      // NUEVO: Grupo del usuario (independiente del acceso)
-        empresaAsignada,    // NUEVO: Empresa del usuario (independiente del acceso)
+        grupoAsignado: grupoAsignado || null,      
+        empresaAsignada: empresaAsignada || null,    
         grupoId: grupoId || null,
         empresaId: empresaId || null,
         dispositivoId: dispositivoId || null,
@@ -132,7 +138,7 @@ export async function POST(request: NextRequest) {
         canViewFormaciones: canViewFormaciones ?? true,
         canViewFacturas: canViewFacturas ?? true,
         active: true,
-        createdBy: userEmail,
+        createdBy: adminCheck.user?.email,
       }
     })
 
@@ -142,7 +148,7 @@ export async function POST(request: NextRequest) {
         userId: newUser.id,
         action: 'CREATE_USER',
         details: JSON.stringify({
-          createdBy: userEmail,
+          createdBy: adminCheck.user?.email,
           userEmail: newUser.email,
           role: newUser.role,
           accessType: newUser.accessType
@@ -153,7 +159,7 @@ export async function POST(request: NextRequest) {
     })
 
     console.log('✅ New user created by admin:', {
-      adminEmail: userEmail,
+      adminEmail: adminCheck.user?.email,
       newUserEmail: newUser.email,
       role: newUser.role
     })
@@ -168,7 +174,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error creating user:', error)
+    console.error('❌ Error creating user:', error)
     return NextResponse.json(
       { error: 'Error interno del servidor' }, 
       { status: 500 }
