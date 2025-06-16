@@ -8,18 +8,50 @@ datasource db {
 }
 
 model User {
-  id                 String   @id @default(cuid())
-  email              String   @unique
+  id                 String        @id @default(cuid())
+  email              String        @unique
   password           String
+  nombre             String?
+  apellidos          String?
   name               String?
+  role               String        @default("EMPRESA")
   accessType         String
   accessId           String
-  canViewContratos   Boolean  @default(true)
-  canViewFormaciones Boolean  @default(true)
-  canViewFacturas    Boolean  @default(true)
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  grupoId            String?
+  empresaId          String?
+  dispositivoId      String?
+  canViewContratos   Boolean       @default(true)
+  canViewFormaciones Boolean       @default(true)
+  canViewFacturas    Boolean       @default(true)
+  active             Boolean       @default(true)
+  lastLogin          DateTime?
+  createdBy          String?
+  updatedBy          String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  empresaAsignada    String?
+  grupoAsignado      String?
+  activityLogs       ActivityLog[]
+  createdByUser      User?         @relation("UserCreatedBy", fields: [createdBy], references: [email])
+  createdUsers       User[]        @relation("UserCreatedBy")
+  empresa            Empresa?      @relation(fields: [empresaId], references: [idSage])
+  grupo              Grupo?        @relation(fields: [grupoId], references: [idGrupo])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  details   String?
+  ipAddress String?
+  userAgent String?
+  metadata  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model Grupo {
@@ -36,6 +68,7 @@ model Grupo {
   dispositivos      Dispositivo[]
   empresas          Empresa[]
   formaciones       Formacion[]
+  users             User[]
 }
 
 model Empresa {
@@ -54,6 +87,7 @@ model Empresa {
   grupo             Grupo         @relation(fields: [idGrupo], references: [idGrupo])
   facturas          Factura[]
   formaciones       Formacion[]
+  users             User[]
 }
 
 model Contrato {
