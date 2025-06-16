@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 
 export async function getSessionFromCookie() {
   try {
-    const cookieStore = await cookies()
+    const cookieStore = cookies()
     const sessionToken = cookieStore.get('next-auth.session-token')
     
     if (!sessionToken) {
@@ -13,7 +13,8 @@ export async function getSessionFromCookie() {
     console.log('🔍 Found session token, making internal request...')
     
     // Hacer una petición interna a la API de session de NextAuth
-    const sessionResponse = await fetch('http://localhost:3000/api/auth/session', {
+    const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+    const sessionResponse = await fetch(`${baseUrl}/api/auth/session`, {
       headers: {
         'Cookie': `next-auth.session-token=${sessionToken.value}`
       }
