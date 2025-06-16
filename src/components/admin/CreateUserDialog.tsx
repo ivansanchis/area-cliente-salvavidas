@@ -89,13 +89,13 @@ export default function CreateUserDialog({ onUserCreated }: CreateUserDialogProp
   // Filtrar empresas cuando cambia el grupo asignado
   useEffect(() => {
     if (formData.grupoAsignado) {
-      const empresasDePasteGrupo = empresas.filter(empresa => 
+      const empresasDelGrupo = empresas.filter(empresa =>
         empresa.grupo?.nombre === formData.grupoAsignado
       )
-      setEmpresasFiltradas(empresasDePasteGrupo)
+      setEmpresasFiltradas(empresasDelGrupo)
       
       // Si la empresa seleccionada no pertenece al nuevo grupo, limpiarla
-      if (formData.empresaAsignada && !empresasDePasteGrupo.find(e => e.nombreCliente === formData.empresaAsignada)) {
+      if (formData.empresaAsignada && !empresasDelGrupo.find(e => e.nombreCliente === formData.empresaAsignada)) {
         setFormData(prev => ({ ...prev, empresaAsignada: '' }))
       }
     } else {
