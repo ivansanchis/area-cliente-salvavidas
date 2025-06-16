@@ -24,6 +24,17 @@ Create a `.env.local` file and ensure the `NEXTAUTH_URL` value matches the origi
 NEXTAUTH_URL=http://localhost:3000
 ```
 
+Also provide a value for `NEXTAUTH_SECRET` so that sessions can be decrypted
+consistently across server restarts. When developing locally you may simply set
+any random string:
+
+```bash
+NEXTAUTH_SECRET=dev-secret
+```
+
+If you cannot set a fixed URL during development, set `AUTH_TRUST_HOST=true` so
+NextAuth can rely on the request's host header.
+
 If the URL does not match, admin API requests will respond with `401 Unauthorized` because the session cookie will not be sent correctly.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
