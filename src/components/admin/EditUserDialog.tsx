@@ -1,10 +1,9 @@
-// src/components/admin/EditUserDialog.tsx
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useState, useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
 import {
   Dialog,
   DialogContent,
@@ -12,27 +11,57 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from '@/components/ui/dialog'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Edit, Eye, EyeOff, RefreshCw, AlertTriangle } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Eye, EyeOff, RefreshCw, Save, X } from 'lucide-react'
+import { toast } from 'sonner'
+
+const editUserSchema = z.object({
+  email: z.string().email('Email inválido'),
+  password: z.string().optional(),
+  nombre: z.string().min(1, 'Nombre requerido'),
+  apellidos: z.string().min(1, 'Apellidos requeridos'),
+  grupoAsignado: z.string().optional(),
+  empresaAsignada: z.string().optional(),
+  role: z.enum(['ADMIN', 'GRUPO', 'EMPRESA', 'DISPOSITIVO']),
+  accessType: z.string().min(1, 'Tipo de acceso requerido'),
+  accessId: z.string().min(1, 'ID de acceso requerido'),
+  canViewContratos: z.boolean(),
+  canViewFormaciones: z.boolean(),
+  canViewFacturas: z.boolean(),
+  active: z.boolean(),
+})
+
+type EditUserFormData = z.infer<typeof editUserSchema>
 
 interface User {
   id: string
   email: string
-  nombre: string | null
-  apellidos: string | null
-  role: string
+  nombre: string
+  apellidos: string
+  grupoAsignado?: string
+  empresaAsignada?: string
+  role: 'ADMIN' | 'GRUPO' | 'EMPRESA' | 'DISPOSITIVO'
   accessType: string
   accessId: string
-  grupoAsignado: string | null
-  empresaAsignada: string | null
   canViewContratos: boolean
   canViewFormaciones: boolean
   canViewFacturas: boolean
@@ -45,23 +74,21 @@ interface Grupo {
   id: string
   idGrupo: string
   nombre: string
+  numeroEquipos: number
+  numeroFormaciones: number
+  mrrTotal: number
 }
 
 interface Empresa {
   id: string
   idSage: string
   nombreCliente: string
-  grupo?: {
+  numeroEquipos: number
+  numeroFormaciones: number
+  mrr: number
+  grupo: {
     nombre: string
   }
-}
-
-interface Dispositivo {
-  id: string
-  numeroSerie: string
-  espacio: string
-  grupoCliente: string
-  nombreCliente: string
 }
 
 interface EditUserDialogProps {
@@ -71,654 +98,594 @@ interface EditUserDialogProps {
   onUserUpdated: () => void
 }
 
-export default function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: EditUserDialogProps) {
-  const [loading, setLoading] = useState(false)
+export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: EditUserDialogProps) {
+  const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [changePassword, setChangePassword] = useState(false)
-  
-  // Datos del formulario
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    nombre: '',
-    apellidos: '',
-    grupoAsignado: '',
-    empresaAsignada: '',
-    tipoAcceso: '',
-    associatedId: '',
-    canViewContratos: true,
-    canViewFormaciones: true,
-    canViewFacturas: true,
-    active: true
-  })
-
-  // Estado original para detectar cambios
-  const [originalData, setOriginalData] = useState<typeof formData | null>(null)
-
-  // Datos para los selectores
   const [grupos, setGrupos] = useState<Grupo[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [empresasFiltradas, setEmpresasFiltradas] = useState<Empresa[]>([])
-  const [dispositivos, setDispositivos] = useState<Dispositivo[]>([])
-  const [dispositivosFiltrados, setDispositivosFiltrados] = useState<Dispositivo[]>([])
-  const [loadingData, setLoadingData] = useState(false)
-  const [dataLoaded, setDataLoaded] = useState(false)
+  const [isDataLoaded, setIsDataLoaded] = useState(false)
 
-  // CORRECCIÓN PRINCIPAL: Efecto para cargar datos cuando se abre el modal
+  const form = useForm<EditUserFormData>({
+    resolver: zodResolver(editUserSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+      nombre: '',
+      apellidos: '',
+      grupoAsignado: '',
+      empresaAsignada: '',
+      role: 'EMPRESA',
+      accessType: 'empresa',
+      accessId: '',
+      canViewContratos: true,
+      canViewFormaciones: true,
+      canViewFacturas: true,
+      active: true,
+    },
+  })
+
+  // 🔧 NUEVO: Función para generar contraseña segura
+  const generateSecurePassword = () => {
+    const length = 12
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    form.setValue('password', password)
+    toast.success('Contraseña generada automáticamente')
+  }
+
+  console.log('🔍 Opening edit modal for user:', user)
+
+  // Cargar datos de selectores cuando se abre el modal
   useEffect(() => {
-    if (open && user) {
-      console.log('🔍 Opening edit modal for user:', {
-        email: user.email,
-        grupoAsignado: user.grupoAsignado,
-        empresaAsignada: user.empresaAsignada,
-        accessType: user.accessType,
-        accessId: user.accessId
-      })
-      
-      // Reset estados
-      setDataLoaded(false)
-      setChangePassword(false)
-      
-      // Cargar datos primero
+    if (open && !isDataLoaded) {
+      console.log('🔄 Loading select data for EditUserDialog...')
       loadSelectData()
     }
-    
-    // Reset cuando se cierra
-    if (!open) {
-      setDataLoaded(false)
-      setFormData({
-        email: '',
-        password: '',
-        nombre: '',
-        apellidos: '',
-        grupoAsignado: '',
-        empresaAsignada: '',
-        tipoAcceso: '',
-        associatedId: '',
-        canViewContratos: true,
-        canViewFormaciones: true,
-        canViewFacturas: true,
-        active: true
-      })
-      setOriginalData(null)
-    }
-  }, [open, user])
-
-  // CORRECCIÓN: Poblar formulario DESPUÉS de cargar datos
-  useEffect(() => {
-    if (dataLoaded && user && open) {
-      console.log('📝 Populating form with user data after data loaded')
-      
-      const userData = {
-        email: user.email,
-        password: '',
-        nombre: user.nombre || '',
-        apellidos: user.apellidos || '',
-        grupoAsignado: user.grupoAsignado || '',
-        empresaAsignada: user.empresaAsignada || '',
-        tipoAcceso: user.accessType.toLowerCase(),
-        associatedId: user.accessId,
-        canViewContratos: user.canViewContratos,
-        canViewFormaciones: user.canViewFormaciones,
-        canViewFacturas: user.canViewFacturas,
-        active: user.active
-      }
-      
-      console.log('📝 Setting form data:', userData)
-      console.log('📊 Available grupos:', grupos.map(g => g.nombre))
-      console.log('📊 Available empresas:', empresas.map(e => e.nombreCliente))
-      
-      setFormData(userData)
-      setOriginalData(userData)
-    }
-  }, [dataLoaded, user, open, grupos, empresas])
-
-  // Filtrar empresas cuando cambia el grupo asignado
-  useEffect(() => {
-    if (formData.grupoAsignado) {
-      const empresasDelGrupo = empresas.filter(empresa =>
-        empresa.grupo?.nombre === formData.grupoAsignado
-      )
-      setEmpresasFiltradas(empresasDelGrupo)
-      
-      // Si la empresa seleccionada no pertenece al nuevo grupo, limpiarla
-      if (formData.empresaAsignada && !empresasDelGrupo.find(e => e.nombreCliente === formData.empresaAsignada)) {
-        setFormData(prev => ({ ...prev, empresaAsignada: '' }))
-      }
-    } else {
-      setEmpresasFiltradas(empresas)
-    }
-  }, [formData.grupoAsignado, empresas])
-
-  // Filtrar dispositivos cuando cambia el grupo asignado
-  useEffect(() => {
-    if (formData.tipoAcceso === 'dispositivo' && formData.grupoAsignado) {
-      const dispositivosDelGrupo = dispositivos.filter(dispositivo => 
-        dispositivo.grupoCliente === formData.grupoAsignado
-      )
-      setDispositivosFiltrados(dispositivosDelGrupo)
-      
-      if (formData.associatedId && !dispositivosDelGrupo.find(d => d.numeroSerie === formData.associatedId)) {
-        setFormData(prev => ({ ...prev, associatedId: '' }))
-      }
-    } else {
-      setDispositivosFiltrados(dispositivos)
-    }
-  }, [formData.grupoAsignado, formData.tipoAcceso, dispositivos])
+  }, [open, isDataLoaded])
 
   const loadSelectData = async () => {
-    setLoadingData(true)
     try {
-      console.log('🔄 Loading select data for EditUserDialog...')
-      
-      // Cargar grupos
-      const gruposRes = await fetch('/api/admin/grupos')
-      if (gruposRes.ok) {
-        const gruposData = await gruposRes.json()
-        console.log('✅ Grupos loaded:', gruposData.length, gruposData.map(g => g.nombre))
-        setGrupos(gruposData)
-      } else {
-        console.error('❌ Error loading grupos:', gruposRes.status, gruposRes.statusText)
-        const errorText = await gruposRes.text()
-        console.error('❌ Error details:', errorText)
+      console.log('📡 Fetching grupos...')
+      const gruposResponse = await fetch('/api/admin/grupos')
+      if (!gruposResponse.ok) {
+        const errorData = await gruposResponse.text()
+        console.log('❌ Error loading grupos:', gruposResponse.status, gruposResponse.statusText)
+        console.log('❌ Error details:', errorData)
+        throw new Error(`Error ${gruposResponse.status}: ${gruposResponse.statusText}`)
       }
+      const gruposData = await gruposResponse.json()
+      setGrupos(gruposData)
+      console.log('✅ Grupos loaded:', gruposData.length)
 
-      // Cargar empresas
-      const empresasRes = await fetch('/api/admin/empresas')
-      if (empresasRes.ok) {
-        const empresasData = await empresasRes.json()
-        console.log('✅ Empresas loaded:', empresasData.length, empresasData.map(e => e.nombreCliente))
-        setEmpresas(empresasData)
-        setEmpresasFiltradas(empresasData)
-      } else {
-        console.error('❌ Error loading empresas:', empresasRes.status, empresasRes.statusText)
-        const errorText = await empresasRes.text()
-        console.error('❌ Error details:', errorText)
+      console.log('📡 Fetching empresas...')
+      const empresasResponse = await fetch('/api/admin/empresas')
+      if (!empresasResponse.ok) {
+        const errorData = await empresasResponse.text()
+        console.log('❌ Error loading empresas:', empresasResponse.status, empresasResponse.statusText)
+        console.log('❌ Error details:', errorData)
+        throw new Error(`Error ${empresasResponse.status}: ${empresasResponse.statusText}`)
       }
+      const empresasData = await empresasResponse.json()
+      setEmpresas(empresasData)
+      console.log('✅ Empresas loaded:', empresasData.length)
 
-      // Cargar dispositivos
-      const dispositivosRes = await fetch('/api/admin/dispositivos')
-      if (dispositivosRes.ok) {
-        const dispositivosData = await dispositivosRes.json()
-        console.log('✅ Dispositivos loaded:', dispositivosData.length)
-        setDispositivos(dispositivosData)
-        setDispositivosFiltrados(dispositivosData)
-      } else {
-        console.error('❌ Error loading dispositivos:', dispositivosRes.status, dispositivosRes.statusText)
-      }
-      
+      setIsDataLoaded(true)
       console.log('✅ All select data loaded successfully')
-      setDataLoaded(true)
-      
     } catch (error) {
       console.error('❌ Error loading select data:', error)
-    } finally {
-      setLoadingData(false)
+      toast.error('Error cargando datos para los selectores')
     }
   }
 
-  const generateSecurePassword = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*'
-    let password = ''
-    
-    // Asegurar al menos un carácter de cada tipo
-    password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]
-    password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]
-    password += '0123456789'[Math.floor(Math.random() * 10)]
-    password += '!@#$%&*'[Math.floor(Math.random() * 7)]
-    
-    // Completar hasta 12 caracteres
-    for (let i = 4; i < 12; i++) {
-      password += chars[Math.floor(Math.random() * chars.length)]
+  // 🔧 CORREGIDO: Poblar formulario cuando se abren los datos Y el usuario
+  useEffect(() => {
+    if (user && isDataLoaded) {
+      console.log('📝 Populating form with user data after data loaded')
+      
+      // Resetear el formulario con todos los valores del usuario
+      const formData: EditUserFormData = {
+        email: user.email || '',
+        password: '', // Siempre vacío para edición
+        nombre: user.nombre || '',
+        apellidos: user.apellidos || '',
+        grupoAsignado: user.grupoAsignado || '',  // ✅ CRÍTICO: Pre-seleccionar grupo
+        empresaAsignada: user.empresaAsignada || '', // ✅ CRÍTICO: Pre-seleccionar empresa
+        role: user.role || 'EMPRESA',
+        accessType: user.accessType || 'empresa',
+        accessId: user.accessId || '',
+        canViewContratos: user.canViewContratos ?? true,
+        canViewFormaciones: user.canViewFormaciones ?? true,
+        canViewFacturas: user.canViewFacturas ?? true,
+        active: user.active ?? true,
+      }
+
+      console.log('📝 Setting form data:', formData)
+      console.log('📊 Available grupos:', grupos.map(g => g.nombre))
+      console.log('📊 Available empresas:', empresas.map(e => e.nombreCliente))
+
+      // ✅ NUEVO: Usar reset() en lugar de setValue() individual
+      form.reset(formData)
+
+      // Si hay grupo asignado, filtrar empresas
+      if (user.grupoAsignado) {
+        console.log('🔍 Filtering empresas for grupo:', user.grupoAsignado)
+        const empresasFiltradas = empresas.filter(empresa => empresa.grupo.nombre === user.grupoAsignado)
+        setEmpresasFiltradas(empresasFiltradas)
+        console.log('📊 Filtered empresas:', empresasFiltradas.map(e => e.nombreCliente))
+      }
     }
-    
-    return password.split('').sort(() => Math.random() - 0.5).join('')
-  }
+  }, [user, isDataLoaded, form, empresas]) // ✅ NUEVO: Incluir todas las dependencias
 
-  const handleGeneratePassword = () => {
-    const newPassword = generateSecurePassword()
-    setFormData(prev => ({ ...prev, password: newPassword }))
-    setShowPassword(true)
-  }
-
-  // Detectar cambios en el formulario
-  const hasChanges = () => {
-    if (!originalData) return false
+  // Manejar cambio de grupo
+  const handleGrupoChange = (grupoNombre: string) => {
+    console.log('🔄 Grupo changed to:', grupoNombre)
+    form.setValue('grupoAsignado', grupoNombre)
     
-    return Object.keys(formData).some(key => {
-      if (key === 'password') return changePassword && formData.password.length > 0
-      return formData[key as keyof typeof formData] !== originalData[key as keyof typeof originalData]
-    })
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    // Limpiar empresa seleccionada cuando cambia el grupo
+    form.setValue('empresaAsignada', '')
     
-    if (!user || !hasChanges()) {
-      onOpenChange(false)
-      return
+    // Filtrar empresas por grupo seleccionado
+    const empresasFiltradas = empresas.filter(empresa => empresa.grupo.nombre === grupoNombre)
+    setEmpresasFiltradas(empresasFiltradas)
+    console.log('📊 Empresas filtradas para grupo', grupoNombre, ':', empresasFiltradas.map(e => e.nombreCliente))
+
+    // Actualizar accessType y accessId basado en el rol
+    const role = form.getValues('role')
+    if (role === 'GRUPO') {
+      form.setValue('accessType', 'grupo')
+      const grupo = grupos.find(g => g.nombre === grupoNombre)
+      if (grupo) {
+        form.setValue('accessId', grupo.idGrupo)
+      }
     }
+  }
 
-    setLoading(true)
+  // Manejar cambio de empresa
+  const handleEmpresaChange = (empresaNombre: string) => {
+    console.log('🔄 Empresa changed to:', empresaNombre)
+    form.setValue('empresaAsignada', empresaNombre)
+
+    // Actualizar accessType y accessId basado en el rol
+    const role = form.getValues('role')
+    if (role === 'EMPRESA') {
+      form.setValue('accessType', 'empresa')
+      const empresa = empresas.find(e => e.nombreCliente === empresaNombre)
+      if (empresa) {
+        form.setValue('accessId', empresa.idSage)
+      }
+    }
+  }
+
+  // Manejar cambio de rol
+  const handleRoleChange = (newRole: 'ADMIN' | 'GRUPO' | 'EMPRESA' | 'DISPOSITIVO') => {
+    console.log('🔄 Role changed to:', newRole)
+    form.setValue('role', newRole)
+
+    // Actualizar accessType y accessId basado en el nuevo rol
+    const grupoAsignado = form.getValues('grupoAsignado')
+    const empresaAsignada = form.getValues('empresaAsignada')
+
+    switch (newRole) {
+      case 'ADMIN':
+        form.setValue('accessType', 'admin')
+        form.setValue('accessId', 'all')
+        break
+      case 'GRUPO':
+        form.setValue('accessType', 'grupo')
+        if (grupoAsignado) {
+          const grupo = grupos.find(g => g.nombre === grupoAsignado)
+          if (grupo) {
+            form.setValue('accessId', grupo.idGrupo)
+          }
+        }
+        break
+      case 'EMPRESA':
+        form.setValue('accessType', 'empresa')
+        if (empresaAsignada) {
+          const empresa = empresas.find(e => e.nombreCliente === empresaAsignada)
+          if (empresa) {
+            form.setValue('accessId', empresa.idSage)
+          }
+        }
+        break
+      case 'DISPOSITIVO':
+        form.setValue('accessType', 'dispositivo')
+        // Para dispositivo, necesitaríamos un selector adicional
+        break
+    }
+  }
+
+  const onSubmit = async (data: EditUserFormData) => {
+    if (!user) return
 
     try {
-      // Determinar role basado en tipoAcceso
-      let role = 'EMPRESA' // default
-      if (formData.tipoAcceso === 'grupo') role = 'GRUPO'
-      else if (formData.tipoAcceso === 'empresa') role = 'EMPRESA'
-      else if (formData.tipoAcceso === 'dispositivo') role = 'DISPOSITIVO'
-
-      const updateData: any = {
-        email: formData.email,
-        nombre: formData.nombre,
-        apellidos: formData.apellidos,
-        grupoAsignado: formData.grupoAsignado,
-        empresaAsignada: formData.empresaAsignada,
-        role: role,
-        accessType: formData.tipoAcceso,
-        accessId: formData.associatedId,
-        canViewContratos: formData.canViewContratos,
-        canViewFormaciones: formData.canViewFormaciones,
-        canViewFacturas: formData.canViewFacturas,
-        active: formData.active
-      }
-
-      // Solo incluir contraseña si se está cambiando
-      if (changePassword && formData.password) {
-        updateData.password = formData.password
-      }
+      setIsLoading(true)
+      console.log('💾 Submitting user update:', { userId: user.id, data })
 
       const response = await fetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updateData),
+        body: JSON.stringify(data),
       })
 
-      if (response.ok) {
-        const updatedUser = await response.json()
-        console.log('✅ Usuario actualizado:', updatedUser)
-        
-        onOpenChange(false)
-        onUserUpdated()
-        
-        // Mostrar mensaje de éxito
-        let message = '¡Usuario actualizado exitosamente!'
-        if (changePassword && formData.password) {
-          message += `\n\n🔑 Nueva contraseña: ${formData.password}\n\n⚠️ Guarda esta contraseña, no se volverá a mostrar.`
-        }
-        alert(message)
-      } else {
-        const error = await response.json()
-        alert(`Error: ${error.error}`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Error actualizando usuario')
       }
+
+      const result = await response.json()
+      console.log('✅ User updated successfully:', result)
+
+      toast.success('Usuario actualizado exitosamente')
+      onUserUpdated()
+      onOpenChange(false)
     } catch (error) {
-      console.error('Error updating user:', error)
-      alert('Error al actualizar usuario')
+      console.error('❌ Error updating user:', error)
+      toast.error(error instanceof Error ? error.message : 'Error actualizando usuario')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const getAssociatedOptions = () => {
-    switch (formData.tipoAcceso) {
-      case 'grupo':
-        return grupos.map(grupo => ({
-          value: grupo.nombre,
-          label: grupo.nombre
-        }))
-      case 'empresa':
-        return empresas.map(empresa => ({
-          value: empresa.nombreCliente,
-          label: empresa.nombreCliente
-        }))
-      case 'dispositivo':
-        const dispositivosAUsar = formData.grupoAsignado ? dispositivosFiltrados : dispositivos
-        return dispositivosAUsar.map(dispositivo => ({
-          value: dispositivo.numeroSerie,
-          label: `${dispositivo.numeroSerie} - ${dispositivo.espacio}`
-        }))
-      default:
-        return []
-    }
+  const handleClose = () => {
+    form.reset()
+    setIsDataLoaded(false)
+    onOpenChange(false)
   }
-
-  if (!user) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <Edit className="w-5 h-5" />
-            <span>Editar Usuario</span>
-          </DialogTitle>
+          <DialogTitle>Editar Usuario</DialogTitle>
           <DialogDescription>
-            Modifica la información del usuario. Solo se guardarán los campos que cambies.
+            Modifica los datos del usuario seleccionado
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Información del usuario */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="text-sm font-medium text-blue-900 mb-2">Usuario Actual</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-blue-700">ID:</span> {user.id}
-              </div>
-              <div>
-                <span className="text-blue-700">Creado:</span> {new Date(user.createdAt).toLocaleDateString()}
-              </div>
-              <div>
-                <span className="text-blue-700">Actualizado:</span> {new Date(user.updatedAt).toLocaleDateString()}
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-blue-700">Estado:</span>
-                <Badge variant={user.active ? "default" : "destructive"}>
-                  {user.active ? "Activo" : "Inactivo"}
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          {/* DEBUG INFO */}
-          {!dataLoaded && (
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <RefreshCw className="w-4 h-4 animate-spin text-yellow-600" />
-                <span className="text-sm text-yellow-800">Cargando datos de selectores...</span>
-              </div>
-            </div>
-          )}
-
-          {/* Datos personales */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-900">Datos Personales</h3>
-            
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Datos básicos */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="nombre">Nombre *</Label>
-                <Input
-                  id="nombre"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                  autoComplete="off"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="apellidos">Apellidos *</Label>
-                <Input
-                  id="apellidos"
-                  value={formData.apellidos}
-                  onChange={(e) => setFormData(prev => ({ ...prev, apellidos: e.target.value }))}
-                  autoComplete="off"
-                  required
-                />
-              </div>
-            </div>
+              <FormField
+                control={form.control}
+                name="nombre"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nombre del usuario" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div>
-              <Label htmlFor="email">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                autoComplete="off"
-                required
+              <FormField
+                control={form.control}
+                name="apellidos"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Apellidos *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apellidos del usuario" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
 
-            {/* Cambio de contraseña */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="changePassword"
-                  checked={changePassword}
-                  onChange={(e) => setChangePassword(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="changePassword" className="text-sm">
-                  Cambiar contraseña
-                </Label>
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-              </div>
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email *</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="usuario@empresa.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              {changePassword && (
-                <div>
-                  <Label htmlFor="password">Nueva Contraseña *</Label>
+            {/* Contraseña */}
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nueva Contraseña</FormLabel>
+                  <FormDescription>
+                    Deja vacío para mantener la contraseña actual
+                  </FormDescription>
                   <div className="flex space-x-2">
-                    <div className="relative flex-1">
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        value={formData.password}
-                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                        autoComplete="new-password"
-                        required={changePassword}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleGeneratePassword}
-                      className="flex items-center space-x-1"
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Nueva contraseña (opcional)"
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={generateSecurePassword}
+                      className="flex items-center gap-2"
                     >
-                      <RefreshCw className="w-4 h-4" />
-                      <span>Generar</span>
+                      <RefreshCw className="h-4 w-4" />
+                      Generar
                     </Button>
                   </div>
-                </div>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
+            />
 
-            {/* Grupo y Empresa Asignados */}
+            {/* Asignación de Grupo y Empresa */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="grupoAsignado">
-                  Grupo Asignado * 
-                  {dataLoaded && user.grupoAsignado && (
-                    <span className="text-xs text-gray-500"> (Actual: {user.grupoAsignado})</span>
+              <FormField
+                control={form.control}
+                name="grupoAsignado"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      Grupo Asignado *
+                      {user?.grupoAsignado && (
+                        <span className="text-xs text-gray-500">
+                          (Actual: {user.grupoAsignado})
+                        </span>
+                      )}
+                    </FormLabel>
+                    <Select 
+                      onValueChange={handleGrupoChange} 
+                      value={field.value || ''} // ✅ CRÍTICO: Usar field.value
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona grupo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {grupos.map((grupo) => (
+                          <SelectItem key={grupo.id} value={grupo.nombre}>
+                            {grupo.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="empresaAsignada"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      Empresa Asignada
+                      {user?.empresaAsignada && (
+                        <span className="text-xs text-gray-500">
+                          (Actual: {user.empresaAsignada})
+                        </span>
+                      )}
+                    </FormLabel>
+                    <Select 
+                      onValueChange={handleEmpresaChange} 
+                      value={field.value || ''} // ✅ CRÍTICO: Usar field.value
+                      disabled={!form.getValues('grupoAsignado')}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Primero selecciona grupo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {empresasFiltradas.map((empresa) => (
+                          <SelectItem key={empresa.id} value={empresa.nombreCliente}>
+                            {empresa.nombreCliente}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Rol y Acceso */}
+            <div className="grid grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rol del Usuario *</FormLabel>
+                    <Select onValueChange={handleRoleChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona rol" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ADMIN">Administrador</SelectItem>
+                        <SelectItem value="GRUPO">Acceso por Grupo</SelectItem>
+                        <SelectItem value="EMPRESA">Acceso por Empresa</SelectItem>
+                        <SelectItem value="DISPOSITIVO">Acceso por Dispositivo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="accessType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Acceso</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Tipo de acceso" {...field} readOnly />
+                    </FormControl>
+                    <FormDescription>
+                      Se actualiza automáticamente según el rol
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="accessId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>ID de Acceso</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ID de acceso" {...field} readOnly />
+                    </FormControl>
+                    <FormDescription>
+                      Se actualiza automáticamente según la asignación
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Permisos */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium">Permisos de Acceso</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="canViewContratos"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>Ver Contratos</FormLabel>
+                        <FormDescription>
+                          Permite acceso a la sección de contratos
+                        </FormDescription>
+                      </div>
+                    </FormItem>
                   )}
-                </Label>
-                {loadingData ? (
-                  <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
-                    <span className="text-sm text-gray-500">Cargando...</span>
-                  </div>
-                ) : (
-                  <Select 
-                    value={formData.grupoAsignado} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, grupoAsignado: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona grupo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {grupos.map((grupo) => (
-                        <SelectItem key={grupo.id} value={grupo.nombre}>
-                          {grupo.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+                />
 
-              <div>
-                <Label htmlFor="empresaAsignada">
-                  Empresa Asignada
-                  {dataLoaded && user.empresaAsignada && (
-                    <span className="text-xs text-gray-500"> (Actual: {user.empresaAsignada})</span>
+                <FormField
+                  control={form.control}
+                  name="canViewFormaciones"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>Ver Formaciones</FormLabel>
+                        <FormDescription>
+                          Permite acceso a la sección de formaciones
+                        </FormDescription>
+                      </div>
+                    </FormItem>
                   )}
-                </Label>
-                {loadingData ? (
-                  <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
-                    <span className="text-sm text-gray-500">Cargando...</span>
+                />
+
+                <FormField
+                  control={form.control}
+                  name="canViewFacturas"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>Ver Facturas</FormLabel>
+                        <FormDescription>
+                          Permite acceso a la sección de facturas
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Estado del usuario */}
+            <FormField
+              control={form.control}
+              name="active"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Usuario Activo</FormLabel>
+                    <FormDescription>
+                      Desmarcar para desactivar el acceso del usuario
+                    </FormDescription>
                   </div>
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleClose}>
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
-                  <Select 
-                    value={formData.empresaAsignada} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, empresaAsignada: value }))}
-                    disabled={!formData.grupoAsignado}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={formData.grupoAsignado ? "Selecciona empresa" : "Primero selecciona grupo"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {empresasFiltradas.map((empresa) => (
-                        <SelectItem key={empresa.id} value={empresa.nombreCliente}>
-                          {empresa.nombreCliente}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Save className="h-4 w-4 mr-2" />
                 )}
-              </div>
-            </div>
-          </div>
-
-          {/* Tipo de acceso */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-900">Nivel de Acceso</h3>
-            
-            <div>
-              <Label htmlFor="tipoAcceso">Nivel de Acceso *</Label>
-              <Select 
-                value={formData.tipoAcceso} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, tipoAcceso: value, associatedId: '' }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el tipo de acceso" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grupo">🏢 Grupo - Ver todos los datos del grupo</SelectItem>
-                  <SelectItem value="empresa">🏪 Empresa - Ver solo datos de la empresa</SelectItem>
-                  <SelectItem value="dispositivo">📱 Dispositivo - Ver solo un dispositivo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formData.tipoAcceso && (
-              <div>
-                <Label htmlFor="associatedId">
-                  {formData.tipoAcceso === 'grupo' && 'Grupo de Acceso *'}
-                  {formData.tipoAcceso === 'empresa' && 'Empresa de Acceso *'}
-                  {formData.tipoAcceso === 'dispositivo' && 'Dispositivo de Acceso *'}
-                </Label>
-                {loadingData ? (
-                  <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
-                    <span className="text-sm text-gray-500">Cargando opciones...</span>
-                  </div>
-                ) : (
-                  <Select 
-                    value={formData.associatedId} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, associatedId: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Selecciona ${formData.tipoAcceso}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAssociatedOptions().map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Permisos granulares */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-900">Permisos y Estado</h3>
-            
-            <div className="space-y-3">
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={formData.canViewContratos}
-                  onChange={(e) => setFormData(prev => ({ ...prev, canViewContratos: e.target.checked }))}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">Contratos</span>
-              </label>
-
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={formData.canViewFormaciones}
-                  onChange={(e) => setFormData(prev => ({ ...prev, canViewFormaciones: e.target.checked }))}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">Formaciones</span>
-              </label>
-
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={formData.canViewFacturas}
-                  onChange={(e) => setFormData(prev => ({ ...prev, canViewFacturas: e.target.checked }))}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">Facturas</span>
-              </label>
-
-              <label className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={formData.active}
-                  onChange={(e) => setFormData(prev => ({ ...prev, active: e.target.checked }))}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm font-medium">Usuario Activo</span>
-                <Badge variant={formData.active ? "default" : "destructive"}>
-                  {formData.active ? "Activo" : "Inactivo"}
-                </Badge>
-              </label>
-            </div>
-          </div>
-
-          {/* Indicador de cambios */}
-          {hasChanges() && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span className="text-sm text-amber-800 font-medium">
-                  Hay cambios pendientes de guardar
-                </span>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={loading || !hasChanges()}
-            >
-              {loading ? 'Guardando...' : 'Guardar Cambios'}
-            </Button>
-          </DialogFooter>
-        </form>
+                {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
