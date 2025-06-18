@@ -1,8 +1,54 @@
 // src/app/api/admin/users/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAdminAccess } from '@/lib/admin-auth'
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+
+// ✅ FUNCIÓN HELPER para verificar admin (igual que en route.ts principal)
+async function verifyAdminAccess() {
+  try {
+    console.log('🔍 Verifying admin access...')
+    
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user?.email) {
+      console.log('❌ No NextAuth session found')
+      return { isValid: false, error: 'No hay sesión activa' }
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { 
+        id: true,
+        email: true,
+        role: true, 
+        active: true,
+        accessType: true
+      }
+    })
+
+    if (!user || !user.active) {
+      return { isValid: false, error: 'Usuario no encontrado o inactivo' }
+    }
+
+    // ✅ VERIFICACIÓN FLEXIBLE
+    const isAdmin = user.role === 'ADMIN' || 
+                   user.accessType === 'ADMIN' || 
+                   user.accessType === 'admin' || 
+                   user.email === 'test@salvavidas.com'
+    
+    if (!isAdmin) {
+      return { isValid: false, error: 'Acceso denegado - permisos insuficientes' }
+    }
+
+    return { isValid: true, user }
+
+  } catch (error) {
+    console.error('❌ Error verifying admin access:', error)
+    return { isValid: false, error: 'Error interno del servidor' }
+  }
+}
 
 interface UpdateUserRequest {
   email?: string

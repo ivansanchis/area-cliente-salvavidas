@@ -116,6 +116,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
   const [empresas, setEmpresas] = useState<Empresa[]>([])
   const [dispositivos, setDispositivos] = useState<Dispositivo[]>([])
   const [isDataLoaded, setIsDataLoaded] = useState(false)
+  const [isFormReady, setIsFormReady] = useState(false)
 
   const form = useForm<EditUserFormData>({
     resolver: zodResolver(editUserSchema),
@@ -147,74 +148,92 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
     toast.success('Contraseña generada automáticamente')
   }
 
-  console.log('🔍 Opening edit modal for user:', user)
+  console.log('🔍 EditUserDialog render - User:', user?.email, 'Open:', open)
 
   // ✅ LIMPIAR estado cuando se cierra el modal
   useEffect(() => {
     if (!open) {
+      console.log('🧹 Modal closed - Cleaning state')
       setIsDataLoaded(false)
+      setIsFormReady(false)
       setGrupos([])
       setEmpresas([])
       setDispositivos([])
+      form.reset({
+        email: '',
+        password: '',
+        nombre: '',
+        apellidos: '',
+        grupoAsignado: '',
+        empresaAsignada: '',
+        tipoAcceso: 'empresa',
+        associatedId: '',
+        canViewContratos: true,
+        canViewFormaciones: true,
+        canViewFacturas: true,
+        active: true,
+      })
     }
-  }, [open])
+  }, [open, form])
 
-  // Cargar datos de selectores cuando se abre el modal
+  // ✅ Cargar datos cuando se abre el modal
   useEffect(() => {
     if (open && !isDataLoaded) {
-      console.log('🔄 Loading select data for EditUserDialog...')
+      console.log('🔄 Modal opened - Loading select data...')
       loadSelectData()
     }
   }, [open, isDataLoaded])
 
   const loadSelectData = async () => {
     try {
-      console.log('📡 Fetching data...')
+      console.log('📡 Fetching select data...')
+      setIsDataLoaded(false)
+      setIsFormReady(false)
       
-      // Cargar grupos
-      const gruposResponse = await fetch('/api/admin/grupos')
-      if (!gruposResponse.ok) {
-        throw new Error(`Error loading grupos: ${gruposResponse.status}`)
+      // Cargar datos en paralelo
+      const [gruposResponse, empresasResponse, dispositivosResponse] = await Promise.all([
+        fetch('/api/admin/grupos'),
+        fetch('/api/admin/empresas'),
+        fetch('/api/admin/dispositivos')
+      ])
+
+      if (!gruposResponse.ok || !empresasResponse.ok || !dispositivosResponse.ok) {
+        throw new Error('Error loading data from APIs')
       }
-      const gruposData = await gruposResponse.json()
+
+      const [gruposData, empresasData, dispositivosData] = await Promise.all([
+        gruposResponse.json(),
+        empresasResponse.json(),
+        dispositivosResponse.json()
+      ])
+
+      console.log('✅ Data loaded:', {
+        grupos: gruposData.length,
+        empresas: empresasData.length,
+        dispositivos: dispositivosData.length
+      })
+
       setGrupos(gruposData)
-      console.log('✅ Grupos loaded:', gruposData.length)
-
-      // Cargar empresas
-      const empresasResponse = await fetch('/api/admin/empresas')
-      if (!empresasResponse.ok) {
-        throw new Error(`Error loading empresas: ${empresasResponse.status}`)
-      }
-      const empresasData = await empresasResponse.json()
       setEmpresas(empresasData)
-      console.log('✅ Empresas loaded:', empresasData.length)
-
-      // Cargar dispositivos
-      const dispositivosResponse = await fetch('/api/admin/dispositivos')
-      if (!dispositivosResponse.ok) {
-        throw new Error(`Error loading dispositivos: ${dispositivosResponse.status}`)
-      }
-      const dispositivosData = await dispositivosResponse.json()
       setDispositivos(dispositivosData)
-      console.log('✅ Dispositivos loaded:', dispositivosData.length)
-
       setIsDataLoaded(true)
-      console.log('✅ All select data loaded successfully')
+
     } catch (error) {
       console.error('❌ Error loading select data:', error)
       toast.error('Error cargando datos para los selectores')
     }
   }
 
-  // ✅ CORREGIDO: Esperar a que TODOS los datos estén listos antes de poblar
+  // ✅ POBLAR FORMULARIO - Solo cuando TODO esté listo
   useEffect(() => {
-    if (user && isDataLoaded && grupos.length > 0 && empresas.length > 0) {
-      console.log('📝 Populating form with user data after ALL data loaded')
-      console.log('👤 User data:', {
+    if (user && isDataLoaded && grupos.length > 0 && empresas.length > 0 && !isFormReady) {
+      console.log('📝 All data ready - Populating form with user data')
+      console.log('👤 User data to populate:', {
         grupoAsignado: user.grupoAsignado,
         empresaAsignada: user.empresaAsignada,
         accessType: user.accessType,
-        accessId: user.accessId
+        accessId: user.accessId,
+        role: user.role
       })
       
       // Mapear role a tipoAcceso
@@ -233,28 +252,31 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
           tipoAcceso = 'empresa'
       }
 
-      // ✅ USAR setTimeout para asegurar que React haya terminado de renderizar
-      setTimeout(() => {
-        const formData: EditUserFormData = {
-          email: user.email || '',
-          password: '',
-          nombre: user.nombre || '',
-          apellidos: user.apellidos || '',
-          grupoAsignado: user.grupoAsignado || '',
-          empresaAsignada: user.empresaAsignada || '',
-          tipoAcceso: tipoAcceso,
-          associatedId: user.accessId || '',
-          canViewContratos: user.canViewContratos ?? true,
-          canViewFormaciones: user.canViewFormaciones ?? true,
-          canViewFacturas: user.canViewFacturas ?? true,
-          active: user.active ?? true,
-        }
+      const formData: EditUserFormData = {
+        email: user.email || '',
+        password: '',
+        nombre: user.nombre || '',
+        apellidos: user.apellidos || '',
+        grupoAsignado: user.grupoAsignado || '',
+        empresaAsignada: user.empresaAsignada || '',
+        tipoAcceso: tipoAcceso,
+        associatedId: user.accessId || '',
+        canViewContratos: user.canViewContratos ?? true,
+        canViewFormaciones: user.canViewFormaciones ?? true,
+        canViewFacturas: user.canViewFacturas ?? true,
+        active: user.active ?? true,
+      }
 
-        console.log('📝 Setting form data with setTimeout:', formData)
+      console.log('📝 Populating form with data:', formData)
+      
+      // ✅ USAR requestAnimationFrame para asegurar que React haya terminado completamente
+      requestAnimationFrame(() => {
         form.reset(formData)
-      }, 100) // ✅ Pequeño delay para asegurar sincronización
+        setIsFormReady(true)
+        console.log('✅ Form populated and ready')
+      })
     }
-  }, [user, isDataLoaded, grupos, empresas, form])
+  }, [user, isDataLoaded, grupos, empresas, isFormReady, form])
 
   // Obtener opciones para el selector de acceso según el tipo
   const getAssociatedOptions = () => {
@@ -281,12 +303,17 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
     }
   }
 
-  // ✅ CORREGIDO: Obtener empresas filtradas por grupo
+  // ✅ OBTENER empresas filtradas por grupo - Función mejorada
   const getEmpresasFiltradas = () => {
     const grupoSeleccionado = form.watch('grupoAsignado')
-    if (!grupoSeleccionado) return []
+    if (!grupoSeleccionado) {
+      console.log('🔍 No group selected, returning empty array')
+      return []
+    }
     
-    return empresas.filter(empresa => empresa.grupo.nombre === grupoSeleccionado)
+    const filtered = empresas.filter(empresa => empresa.grupo.nombre === grupoSeleccionado)
+    console.log(`🔍 Filtering empresas by group "${grupoSeleccionado}":`, filtered.length, 'found')
+    return filtered
   }
 
   // Manejar cambio de tipo de acceso
@@ -294,6 +321,13 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
     console.log('🔄 Tipo acceso changed to:', newTipoAcceso)
     form.setValue('tipoAcceso', newTipoAcceso)
     form.setValue('associatedId', '') // Limpiar la selección anterior
+  }
+
+  // ✅ Manejar cambio de grupo - Limpiar empresa cuando cambia
+  const handleGrupoChange = (newGrupo: string) => {
+    console.log('🔄 Grupo changed to:', newGrupo)
+    form.setValue('grupoAsignado', newGrupo)
+    form.setValue('empresaAsignada', '') // Limpiar empresa cuando cambia el grupo
   }
 
   const onSubmit = async (data: EditUserFormData) => {
@@ -363,6 +397,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
   const handleClose = () => {
     form.reset()
     setIsDataLoaded(false)
+    setIsFormReady(false)
     setGrupos([])
     setEmpresas([])
     setDispositivos([])
@@ -379,231 +414,239 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Datos básicos */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="nombre"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nombre del usuario" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="apellidos"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Apellidos *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Apellidos del usuario" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        {/* ✅ Mostrar loading state mientras se cargan los datos */}
+        {!isDataLoaded && (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              <span>Cargando datos del formulario...</span>
             </div>
+          </div>
+        )}
 
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="email" 
-                      placeholder="usuario@empresa.com" 
-                      autoComplete="off"
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* ✅ CONTRASEÑA - Ancho completo */}
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nueva Contraseña</FormLabel>
-                  <FormDescription>
-                    Deja vacío para mantener la contraseña actual
-                  </FormDescription>
-                  <div className="flex gap-2"> {/* ✅ Cambié space-x-2 por gap-2 para mejor control */}
-                    <FormControl>
-                      <div className="relative flex-1"> {/* ✅ flex-1 para ocupar todo el espacio disponible */}
-                        <Input
-                          type={showPassword ? "text" : "password"}
-                          placeholder="Nueva contraseña (opcional)"
-                          autoComplete="new-password"
-                          {...field}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={generateSecurePassword}
-                      className="flex items-center gap-2 shrink-0" // ✅ shrink-0 para que no se encoja
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      Generar
-                    </Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Asignación de Grupo y Empresa */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="grupoAsignado"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex flex-col gap-2">
-                      Grupo Asignado *
-                      {user?.grupoAsignado && (
-                        <span className="text-xs text-gray-500">
-                          (Actual: {user.grupoAsignado})
-                        </span>
-                      )}
-                    </FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        form.setValue('grupoAsignado', value)
-                        // Limpiar empresa cuando cambia el grupo
-                        form.setValue('empresaAsignada', '')
-                      }} 
-                      value={field.value || ''}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona grupo" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {grupos.map((grupo) => (
-                          <SelectItem key={grupo.id} value={grupo.nombre}>
-                            {grupo.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="empresaAsignada"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex flex-col gap-2">
-                      Empresa Asignada
-                      {user?.empresaAsignada && (
-                        <span className="text-xs text-gray-500">
-                          (Actual: {user.empresaAsignada})
-                        </span>
-                      )}
-                    </FormLabel>
-                    <Select 
-                      onValueChange={(value) => form.setValue('empresaAsignada', value)} 
-                      value={field.value || ''}
-                      disabled={!form.watch('grupoAsignado')}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Primero selecciona grupo" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {getEmpresasFiltradas().map((empresa) => (
-                          <SelectItem key={empresa.id} value={empresa.nombreCliente}>
-                            {empresa.nombreCliente}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Nivel de Acceso */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900">Nivel de Acceso</h3>
-              
-              <FormField
-                control={form.control}
-                name="tipoAcceso"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label htmlFor="tipoAcceso">Nivel de Acceso *</Label>
-                    <Select 
-                      value={field.value} 
-                      onValueChange={handleTipoAccesoChange}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona el tipo de acceso" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="grupo">🏢 Grupo - Ver todos los datos del grupo</SelectItem>
-                        <SelectItem value="empresa">🏪 Empresa - Ver solo datos de la empresa</SelectItem>
-                        <SelectItem value="dispositivo">📱 Dispositivo - Ver solo un dispositivo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {form.watch('tipoAcceso') && (
+        {/* ✅ Solo mostrar formulario cuando TODO esté listo */}
+        {isDataLoaded && (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Datos básicos */}
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="associatedId"
+                  name="nombre"
                   render={({ field }) => (
                     <FormItem>
-                      <Label htmlFor="associatedId">
-                        {form.watch('tipoAcceso') === 'grupo' && 'Grupo de Acceso *'}
-                        {form.watch('tipoAcceso') === 'empresa' && 'Empresa de Acceso *'}
-                        {form.watch('tipoAcceso') === 'dispositivo' && 'Dispositivo de Acceso *'}
-                      </Label>
-                      {!isDataLoaded ? (
-                        <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
-                          <span className="text-sm text-gray-500">Cargando opciones...</span>
+                      <FormLabel>Nombre *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nombre del usuario" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="apellidos"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Apellidos *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Apellidos del usuario" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email *</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="email" 
+                        placeholder="usuario@empresa.com" 
+                        autoComplete="off"
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* ✅ CONTRASEÑA - Ancho completo */}
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nueva Contraseña</FormLabel>
+                    <FormDescription>
+                      Deja vacío para mantener la contraseña actual
+                    </FormDescription>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <div className="relative flex-1">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Nueva contraseña (opcional)"
+                            autoComplete="new-password"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
                         </div>
-                      ) : (
+                      </FormControl>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={generateSecurePassword}
+                        className="flex items-center gap-2 shrink-0"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Generar
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* ✅ Asignación de Grupo y Empresa - MEJORADO */}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="grupoAsignado"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex flex-col gap-2">
+                        Grupo Asignado *
+                        {user?.grupoAsignado && (
+                          <span className="text-xs text-gray-500">
+                            (Actual: {user.grupoAsignado})
+                          </span>
+                        )}
+                      </FormLabel>
+                      <Select 
+                        onValueChange={handleGrupoChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona grupo" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {grupos.map((grupo) => (
+                            <SelectItem key={grupo.id} value={grupo.nombre}>
+                              {grupo.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="empresaAsignada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex flex-col gap-2">
+                        Empresa Asignada
+                        {user?.empresaAsignada && (
+                          <span className="text-xs text-gray-500">
+                            (Actual: {user.empresaAsignada})
+                          </span>
+                        )}
+                      </FormLabel>
+                      <Select 
+                        onValueChange={(value) => form.setValue('empresaAsignada', value)} 
+                        value={field.value || ''}
+                        disabled={!form.watch('grupoAsignado')}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Primero selecciona grupo" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {getEmpresasFiltradas().map((empresa) => (
+                            <SelectItem key={empresa.id} value={empresa.nombreCliente}>
+                              {empresa.nombreCliente}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Nivel de Acceso */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-900">Nivel de Acceso</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="tipoAcceso"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="tipoAcceso">Nivel de Acceso *</Label>
+                      <Select 
+                        value={field.value} 
+                        onValueChange={handleTipoAccesoChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona el tipo de acceso" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="grupo">🏢 Grupo - Ver todos los datos del grupo</SelectItem>
+                          <SelectItem value="empresa">🏪 Empresa - Ver solo datos de la empresa</SelectItem>
+                          <SelectItem value="dispositivo">📱 Dispositivo - Ver solo un dispositivo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {form.watch('tipoAcceso') && (
+                  <FormField
+                    control={form.control}
+                    name="associatedId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="associatedId">
+                          {form.watch('tipoAcceso') === 'grupo' && 'Grupo de Acceso *'}
+                          {form.watch('tipoAcceso') === 'empresa' && 'Empresa de Acceso *'}
+                          {form.watch('tipoAcceso') === 'dispositivo' && 'Dispositivo de Acceso *'}
+                          {user?.accessId && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              (Actual: {user.accessId})
+                            </span>
+                          )}
+                        </Label>
                         <Select 
                           value={field.value} 
                           onValueChange={(value) => form.setValue('associatedId', value)}
@@ -621,131 +664,131 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                             ))}
                           </SelectContent>
                         </Select>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-            </div>
-
-            {/* Permisos de Acceso */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Permisos de Acceso</h4>
-              <div className="grid grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="canViewContratos"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Contratos</FormLabel>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="canViewFormaciones"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Formaciones</FormLabel>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="canViewFacturas"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Facturas</FormLabel>
-                      </div>
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
-            </div>
 
-            {/* ✅ USUARIO ACTIVO - Switch con contenedor separado */}
-            <div className="border-t pt-6">
-              <div className="bg-gray-50 rounded-lg p-4 border">
-                <FormField
-                  control={form.control}
-                  name="active"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between space-y-0">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-sm font-medium">
-                          Estado del Usuario
-                        </FormLabel>
-                        <FormDescription>
-                          {field.value 
-                            ? "El usuario tiene acceso activo al sistema" 
-                            : "El usuario está desactivado y no puede acceder"
-                          }
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs font-medium ${field.value ? 'text-green-600' : 'text-red-600'}`}>
-                            {field.value ? 'Activo' : 'Inactivo'}
-                          </span>
-                          <Switch
+              {/* Permisos de Acceso */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium">Permisos de Acceso</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="canViewContratos"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
                             checked={field.value}
                             onCheckedChange={field.onChange}
-                            className={`${
-                              field.value 
-                                ? 'bg-green-600 focus-visible:ring-green-600' 
-                                : 'bg-red-600 focus-visible:ring-red-600'
-                            }`}
                           />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Contratos</FormLabel>
                         </div>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
+                      </FormItem>
+                    )}
+                  />
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleClose}>
-                <X className="h-4 w-4 mr-2" />
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
-                )}
-                {isLoading ? 'Guardando...' : 'Guardar Cambios'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+                  <FormField
+                    control={form.control}
+                    name="canViewFormaciones"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Formaciones</FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="canViewFacturas"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Facturas</FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {/* ✅ USUARIO ACTIVO - Switch con contenedor separado */}
+              <div className="border-t pt-6">
+                <div className="bg-gray-50 rounded-lg p-4 border">
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between space-y-0">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-sm font-medium">
+                            Estado del Usuario
+                          </FormLabel>
+                          <FormDescription>
+                            {field.value 
+                              ? "El usuario tiene acceso activo al sistema" 
+                              : "El usuario está desactivado y no puede acceder"
+                            }
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-xs font-medium ${field.value ? 'text-green-600' : 'text-red-600'}`}>
+                              {field.value ? 'Activo' : 'Inactivo'}
+                            </span>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              className={`${
+                                field.value 
+                                  ? 'bg-green-600 focus-visible:ring-green-600' 
+                                  : 'bg-red-600 focus-visible:ring-red-600'
+                              }`}
+                            />
+                          </div>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={handleClose}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        )}
       </DialogContent>
     </Dialog>
   )

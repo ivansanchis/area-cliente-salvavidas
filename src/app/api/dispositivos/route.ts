@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionFromCookie } from '@/lib/jwt-helper'
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSessionFromCookie()
+    // ✅ USAR NextAuth directamente
+    const session = await getServerSession(authOptions)
     
     if (!session?.user) {
-      console.log('❌ No session found')
+      console.log('❌ No NextAuth session found')
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
     console.log('🔍 User session data:', {
       email: session.user.email,
-      role: session.user.role,
       accessType: session.user.accessType,
       accessId: session.user.accessId
     })
