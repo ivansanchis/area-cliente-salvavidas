@@ -33,7 +33,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import CreateUserDialog from "@/components/admin/CreateUserDialog"
-import EditUserDialog from "@/components/admin/EditUserDialog"
+import { EditUserDialog } from "@/components/admin/EditUserDialog" 
 
 interface User {
   id: string

@@ -31,6 +31,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { Eye, EyeOff, RefreshCw, Save, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -41,9 +43,8 @@ const editUserSchema = z.object({
   apellidos: z.string().min(1, 'Apellidos requeridos'),
   grupoAsignado: z.string().optional(),
   empresaAsignada: z.string().optional(),
-  role: z.enum(['ADMIN', 'GRUPO', 'EMPRESA', 'DISPOSITIVO']),
-  accessType: z.string().min(1, 'Tipo de acceso requerido'),
-  accessId: z.string().min(1, 'ID de acceso requerido'),
+  tipoAcceso: z.enum(['grupo', 'empresa', 'dispositivo']),
+  associatedId: z.string().min(1, 'ID de acceso requerido'),
   canViewContratos: z.boolean(),
   canViewFormaciones: z.boolean(),
   canViewFacturas: z.boolean(),
@@ -91,6 +92,16 @@ interface Empresa {
   }
 }
 
+interface Dispositivo {
+  id: string
+  numeroSerie: string
+  espacio: string
+  provincia: string
+  situacion: string
+  nombreCliente: string
+  grupoCliente: string
+}
+
 interface EditUserDialogProps {
   user: User | null
   open: boolean
@@ -103,7 +114,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
   const [showPassword, setShowPassword] = useState(false)
   const [grupos, setGrupos] = useState<Grupo[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
-  const [empresasFiltradas, setEmpresasFiltradas] = useState<Empresa[]>([])
+  const [dispositivos, setDispositivos] = useState<Dispositivo[]>([])
   const [isDataLoaded, setIsDataLoaded] = useState(false)
 
   const form = useForm<EditUserFormData>({
@@ -115,9 +126,8 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
       apellidos: '',
       grupoAsignado: '',
       empresaAsignada: '',
-      role: 'EMPRESA',
-      accessType: 'empresa',
-      accessId: '',
+      tipoAcceso: 'empresa',
+      associatedId: '',
       canViewContratos: true,
       canViewFormaciones: true,
       canViewFacturas: true,
@@ -125,7 +135,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
     },
   })
 
-  // 🔧 NUEVO: Función para generar contraseña segura
+  // Función para generar contraseña segura
   const generateSecurePassword = () => {
     const length = 12
     const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
@@ -139,6 +149,16 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
 
   console.log('🔍 Opening edit modal for user:', user)
 
+  // ✅ LIMPIAR estado cuando se cierra el modal
+  useEffect(() => {
+    if (!open) {
+      setIsDataLoaded(false)
+      setGrupos([])
+      setEmpresas([])
+      setDispositivos([])
+    }
+  }, [open])
+
   // Cargar datos de selectores cuando se abre el modal
   useEffect(() => {
     if (open && !isDataLoaded) {
@@ -149,29 +169,34 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
 
   const loadSelectData = async () => {
     try {
-      console.log('📡 Fetching grupos...')
+      console.log('📡 Fetching data...')
+      
+      // Cargar grupos
       const gruposResponse = await fetch('/api/admin/grupos')
       if (!gruposResponse.ok) {
-        const errorData = await gruposResponse.text()
-        console.log('❌ Error loading grupos:', gruposResponse.status, gruposResponse.statusText)
-        console.log('❌ Error details:', errorData)
-        throw new Error(`Error ${gruposResponse.status}: ${gruposResponse.statusText}`)
+        throw new Error(`Error loading grupos: ${gruposResponse.status}`)
       }
       const gruposData = await gruposResponse.json()
       setGrupos(gruposData)
       console.log('✅ Grupos loaded:', gruposData.length)
 
-      console.log('📡 Fetching empresas...')
+      // Cargar empresas
       const empresasResponse = await fetch('/api/admin/empresas')
       if (!empresasResponse.ok) {
-        const errorData = await empresasResponse.text()
-        console.log('❌ Error loading empresas:', empresasResponse.status, empresasResponse.statusText)
-        console.log('❌ Error details:', errorData)
-        throw new Error(`Error ${empresasResponse.status}: ${empresasResponse.statusText}`)
+        throw new Error(`Error loading empresas: ${empresasResponse.status}`)
       }
       const empresasData = await empresasResponse.json()
       setEmpresas(empresasData)
       console.log('✅ Empresas loaded:', empresasData.length)
+
+      // Cargar dispositivos
+      const dispositivosResponse = await fetch('/api/admin/dispositivos')
+      if (!dispositivosResponse.ok) {
+        throw new Error(`Error loading dispositivos: ${dispositivosResponse.status}`)
+      }
+      const dispositivosData = await dispositivosResponse.json()
+      setDispositivos(dispositivosData)
+      console.log('✅ Dispositivos loaded:', dispositivosData.length)
 
       setIsDataLoaded(true)
       console.log('✅ All select data loaded successfully')
@@ -181,122 +206,94 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
     }
   }
 
-  // 🔧 CORREGIDO: Poblar formulario cuando se abren los datos Y el usuario
+  // ✅ CORREGIDO: Esperar a que TODOS los datos estén listos antes de poblar
   useEffect(() => {
-    if (user && isDataLoaded) {
-      console.log('📝 Populating form with user data after data loaded')
+    if (user && isDataLoaded && grupos.length > 0 && empresas.length > 0) {
+      console.log('📝 Populating form with user data after ALL data loaded')
+      console.log('👤 User data:', {
+        grupoAsignado: user.grupoAsignado,
+        empresaAsignada: user.empresaAsignada,
+        accessType: user.accessType,
+        accessId: user.accessId
+      })
       
-      // Resetear el formulario con todos los valores del usuario
-      const formData: EditUserFormData = {
-        email: user.email || '',
-        password: '', // Siempre vacío para edición
-        nombre: user.nombre || '',
-        apellidos: user.apellidos || '',
-        grupoAsignado: user.grupoAsignado || '',  // ✅ CRÍTICO: Pre-seleccionar grupo
-        empresaAsignada: user.empresaAsignada || '', // ✅ CRÍTICO: Pre-seleccionar empresa
-        role: user.role || 'EMPRESA',
-        accessType: user.accessType || 'empresa',
-        accessId: user.accessId || '',
-        canViewContratos: user.canViewContratos ?? true,
-        canViewFormaciones: user.canViewFormaciones ?? true,
-        canViewFacturas: user.canViewFacturas ?? true,
-        active: user.active ?? true,
+      // Mapear role a tipoAcceso
+      let tipoAcceso: 'grupo' | 'empresa' | 'dispositivo' = 'empresa'
+      switch (user.role) {
+        case 'GRUPO':
+          tipoAcceso = 'grupo'
+          break
+        case 'EMPRESA':
+          tipoAcceso = 'empresa'
+          break
+        case 'DISPOSITIVO':
+          tipoAcceso = 'dispositivo'
+          break
+        default:
+          tipoAcceso = 'empresa'
       }
 
-      console.log('📝 Setting form data:', formData)
-      console.log('📊 Available grupos:', grupos.map(g => g.nombre))
-      console.log('📊 Available empresas:', empresas.map(e => e.nombreCliente))
+      // ✅ USAR setTimeout para asegurar que React haya terminado de renderizar
+      setTimeout(() => {
+        const formData: EditUserFormData = {
+          email: user.email || '',
+          password: '',
+          nombre: user.nombre || '',
+          apellidos: user.apellidos || '',
+          grupoAsignado: user.grupoAsignado || '',
+          empresaAsignada: user.empresaAsignada || '',
+          tipoAcceso: tipoAcceso,
+          associatedId: user.accessId || '',
+          canViewContratos: user.canViewContratos ?? true,
+          canViewFormaciones: user.canViewFormaciones ?? true,
+          canViewFacturas: user.canViewFacturas ?? true,
+          active: user.active ?? true,
+        }
 
-      // ✅ NUEVO: Usar reset() en lugar de setValue() individual
-      form.reset(formData)
-
-      // Si hay grupo asignado, filtrar empresas
-      if (user.grupoAsignado) {
-        console.log('🔍 Filtering empresas for grupo:', user.grupoAsignado)
-        const empresasFiltradas = empresas.filter(empresa => empresa.grupo.nombre === user.grupoAsignado)
-        setEmpresasFiltradas(empresasFiltradas)
-        console.log('📊 Filtered empresas:', empresasFiltradas.map(e => e.nombreCliente))
-      }
+        console.log('📝 Setting form data with setTimeout:', formData)
+        form.reset(formData)
+      }, 100) // ✅ Pequeño delay para asegurar sincronización
     }
-  }, [user, isDataLoaded, form, empresas]) // ✅ NUEVO: Incluir todas las dependencias
+  }, [user, isDataLoaded, grupos, empresas, form])
 
-  // Manejar cambio de grupo
-  const handleGrupoChange = (grupoNombre: string) => {
-    console.log('🔄 Grupo changed to:', grupoNombre)
-    form.setValue('grupoAsignado', grupoNombre)
+  // Obtener opciones para el selector de acceso según el tipo
+  const getAssociatedOptions = () => {
+    const tipoAcceso = form.watch('tipoAcceso')
     
-    // Limpiar empresa seleccionada cuando cambia el grupo
-    form.setValue('empresaAsignada', '')
-    
-    // Filtrar empresas por grupo seleccionado
-    const empresasFiltradas = empresas.filter(empresa => empresa.grupo.nombre === grupoNombre)
-    setEmpresasFiltradas(empresasFiltradas)
-    console.log('📊 Empresas filtradas para grupo', grupoNombre, ':', empresasFiltradas.map(e => e.nombreCliente))
-
-    // Actualizar accessType y accessId basado en el rol
-    const role = form.getValues('role')
-    if (role === 'GRUPO') {
-      form.setValue('accessType', 'grupo')
-      const grupo = grupos.find(g => g.nombre === grupoNombre)
-      if (grupo) {
-        form.setValue('accessId', grupo.idGrupo)
-      }
+    switch (tipoAcceso) {
+      case 'grupo':
+        return grupos.map(grupo => ({
+          value: grupo.idGrupo,
+          label: grupo.nombre
+        }))
+      case 'empresa':
+        return empresas.map(empresa => ({
+          value: empresa.idSage,
+          label: empresa.nombreCliente
+        }))
+      case 'dispositivo':
+        return dispositivos.map(dispositivo => ({
+          value: dispositivo.numeroSerie,
+          label: `${dispositivo.numeroSerie} - ${dispositivo.espacio}`
+        }))
+      default:
+        return []
     }
   }
 
-  // Manejar cambio de empresa
-  const handleEmpresaChange = (empresaNombre: string) => {
-    console.log('🔄 Empresa changed to:', empresaNombre)
-    form.setValue('empresaAsignada', empresaNombre)
-
-    // Actualizar accessType y accessId basado en el rol
-    const role = form.getValues('role')
-    if (role === 'EMPRESA') {
-      form.setValue('accessType', 'empresa')
-      const empresa = empresas.find(e => e.nombreCliente === empresaNombre)
-      if (empresa) {
-        form.setValue('accessId', empresa.idSage)
-      }
-    }
+  // ✅ CORREGIDO: Obtener empresas filtradas por grupo
+  const getEmpresasFiltradas = () => {
+    const grupoSeleccionado = form.watch('grupoAsignado')
+    if (!grupoSeleccionado) return []
+    
+    return empresas.filter(empresa => empresa.grupo.nombre === grupoSeleccionado)
   }
 
-  // Manejar cambio de rol
-  const handleRoleChange = (newRole: 'ADMIN' | 'GRUPO' | 'EMPRESA' | 'DISPOSITIVO') => {
-    console.log('🔄 Role changed to:', newRole)
-    form.setValue('role', newRole)
-
-    // Actualizar accessType y accessId basado en el nuevo rol
-    const grupoAsignado = form.getValues('grupoAsignado')
-    const empresaAsignada = form.getValues('empresaAsignada')
-
-    switch (newRole) {
-      case 'ADMIN':
-        form.setValue('accessType', 'admin')
-        form.setValue('accessId', 'all')
-        break
-      case 'GRUPO':
-        form.setValue('accessType', 'grupo')
-        if (grupoAsignado) {
-          const grupo = grupos.find(g => g.nombre === grupoAsignado)
-          if (grupo) {
-            form.setValue('accessId', grupo.idGrupo)
-          }
-        }
-        break
-      case 'EMPRESA':
-        form.setValue('accessType', 'empresa')
-        if (empresaAsignada) {
-          const empresa = empresas.find(e => e.nombreCliente === empresaAsignada)
-          if (empresa) {
-            form.setValue('accessId', empresa.idSage)
-          }
-        }
-        break
-      case 'DISPOSITIVO':
-        form.setValue('accessType', 'dispositivo')
-        // Para dispositivo, necesitaríamos un selector adicional
-        break
-    }
+  // Manejar cambio de tipo de acceso
+  const handleTipoAccesoChange = (newTipoAcceso: 'grupo' | 'empresa' | 'dispositivo') => {
+    console.log('🔄 Tipo acceso changed to:', newTipoAcceso)
+    form.setValue('tipoAcceso', newTipoAcceso)
+    form.setValue('associatedId', '') // Limpiar la selección anterior
   }
 
   const onSubmit = async (data: EditUserFormData) => {
@@ -306,12 +303,42 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
       setIsLoading(true)
       console.log('💾 Submitting user update:', { userId: user.id, data })
 
+      // Mapear tipoAcceso de vuelta a role para compatibilidad con la API
+      let role: 'ADMIN' | 'GRUPO' | 'EMPRESA' | 'DISPOSITIVO' = 'EMPRESA'
+      switch (data.tipoAcceso) {
+        case 'grupo':
+          role = 'GRUPO'
+          break
+        case 'empresa':
+          role = 'EMPRESA'
+          break
+        case 'dispositivo':
+          role = 'DISPOSITIVO'
+          break
+      }
+
+      const updateData = {
+        email: data.email,
+        password: data.password,
+        nombre: data.nombre,
+        apellidos: data.apellidos,
+        grupoAsignado: data.grupoAsignado,
+        empresaAsignada: data.empresaAsignada,
+        role: role,
+        accessType: data.tipoAcceso,
+        accessId: data.associatedId,
+        canViewContratos: data.canViewContratos,
+        canViewFormaciones: data.canViewFormaciones,
+        canViewFacturas: data.canViewFacturas,
+        active: data.active,
+      }
+
       const response = await fetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(updateData),
       })
 
       if (!response.ok) {
@@ -336,12 +363,15 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
   const handleClose = () => {
     form.reset()
     setIsDataLoaded(false)
+    setGrupos([])
+    setEmpresas([])
+    setDispositivos([])
     onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Usuario</DialogTitle>
           <DialogDescription>
@@ -389,14 +419,19 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                 <FormItem>
                   <FormLabel>Email *</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="usuario@empresa.com" {...field} />
+                    <Input 
+                      type="email" 
+                      placeholder="usuario@empresa.com" 
+                      autoComplete="off"
+                      {...field} 
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Contraseña */}
+            {/* ✅ CONTRASEÑA - Ancho completo */}
             <FormField
               control={form.control}
               name="password"
@@ -406,12 +441,13 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                   <FormDescription>
                     Deja vacío para mantener la contraseña actual
                   </FormDescription>
-                  <div className="flex space-x-2">
+                  <div className="flex gap-2"> {/* ✅ Cambié space-x-2 por gap-2 para mejor control */}
                     <FormControl>
-                      <div className="relative">
+                      <div className="relative flex-1"> {/* ✅ flex-1 para ocupar todo el espacio disponible */}
                         <Input
                           type={showPassword ? "text" : "password"}
                           placeholder="Nueva contraseña (opcional)"
+                          autoComplete="new-password"
                           {...field}
                         />
                         <Button
@@ -433,7 +469,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                       type="button" 
                       variant="outline" 
                       onClick={generateSecurePassword}
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-2 shrink-0" // ✅ shrink-0 para que no se encoja
                     >
                       <RefreshCw className="h-4 w-4" />
                       Generar
@@ -451,7 +487,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                 name="grupoAsignado"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center gap-2">
+                    <FormLabel className="flex flex-col gap-2">
                       Grupo Asignado *
                       {user?.grupoAsignado && (
                         <span className="text-xs text-gray-500">
@@ -460,8 +496,12 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                       )}
                     </FormLabel>
                     <Select 
-                      onValueChange={handleGrupoChange} 
-                      value={field.value || ''} // ✅ CRÍTICO: Usar field.value
+                      onValueChange={(value) => {
+                        form.setValue('grupoAsignado', value)
+                        // Limpiar empresa cuando cambia el grupo
+                        form.setValue('empresaAsignada', '')
+                      }} 
+                      value={field.value || ''}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -486,7 +526,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                 name="empresaAsignada"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center gap-2">
+                    <FormLabel className="flex flex-col gap-2">
                       Empresa Asignada
                       {user?.empresaAsignada && (
                         <span className="text-xs text-gray-500">
@@ -495,9 +535,9 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                       )}
                     </FormLabel>
                     <Select 
-                      onValueChange={handleEmpresaChange} 
-                      value={field.value || ''} // ✅ CRÍTICO: Usar field.value
-                      disabled={!form.getValues('grupoAsignado')}
+                      onValueChange={(value) => form.setValue('empresaAsignada', value)} 
+                      value={field.value || ''}
+                      disabled={!form.watch('grupoAsignado')}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -505,7 +545,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {empresasFiltradas.map((empresa) => (
+                        {getEmpresasFiltradas().map((empresa) => (
                           <SelectItem key={empresa.id} value={empresa.nombreCliente}>
                             {empresa.nombreCliente}
                           </SelectItem>
@@ -518,25 +558,29 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
               />
             </div>
 
-            {/* Rol y Acceso */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Nivel de Acceso */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-900">Nivel de Acceso</h3>
+              
               <FormField
                 control={form.control}
-                name="role"
+                name="tipoAcceso"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Rol del Usuario *</FormLabel>
-                    <Select onValueChange={handleRoleChange} value={field.value}>
+                    <Label htmlFor="tipoAcceso">Nivel de Acceso *</Label>
+                    <Select 
+                      value={field.value} 
+                      onValueChange={handleTipoAccesoChange}
+                    >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecciona rol" />
+                          <SelectValue placeholder="Selecciona el tipo de acceso" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="ADMIN">Administrador</SelectItem>
-                        <SelectItem value="GRUPO">Acceso por Grupo</SelectItem>
-                        <SelectItem value="EMPRESA">Acceso por Empresa</SelectItem>
-                        <SelectItem value="DISPOSITIVO">Acceso por Dispositivo</SelectItem>
+                        <SelectItem value="grupo">🏢 Grupo - Ver todos los datos del grupo</SelectItem>
+                        <SelectItem value="empresa">🏪 Empresa - Ver solo datos de la empresa</SelectItem>
+                        <SelectItem value="dispositivo">📱 Dispositivo - Ver solo un dispositivo</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -544,42 +588,48 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="accessType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Acceso</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Tipo de acceso" {...field} readOnly />
-                    </FormControl>
-                    <FormDescription>
-                      Se actualiza automáticamente según el rol
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="accessId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>ID de Acceso</FormLabel>
-                    <FormControl>
-                      <Input placeholder="ID de acceso" {...field} readOnly />
-                    </FormControl>
-                    <FormDescription>
-                      Se actualiza automáticamente según la asignación
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {form.watch('tipoAcceso') && (
+                <FormField
+                  control={form.control}
+                  name="associatedId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="associatedId">
+                        {form.watch('tipoAcceso') === 'grupo' && 'Grupo de Acceso *'}
+                        {form.watch('tipoAcceso') === 'empresa' && 'Empresa de Acceso *'}
+                        {form.watch('tipoAcceso') === 'dispositivo' && 'Dispositivo de Acceso *'}
+                      </Label>
+                      {!isDataLoaded ? (
+                        <div className="h-10 bg-gray-100 rounded-md flex items-center justify-center">
+                          <span className="text-sm text-gray-500">Cargando opciones...</span>
+                        </div>
+                      ) : (
+                        <Select 
+                          value={field.value} 
+                          onValueChange={(value) => form.setValue('associatedId', value)}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={`Selecciona ${form.watch('tipoAcceso')}`} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {getAssociatedOptions().map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
 
-            {/* Permisos */}
+            {/* Permisos de Acceso */}
             <div className="space-y-4">
               <h4 className="text-sm font-medium">Permisos de Acceso</h4>
               <div className="grid grid-cols-3 gap-4">
@@ -595,10 +645,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
-                        <FormLabel>Ver Contratos</FormLabel>
-                        <FormDescription>
-                          Permite acceso a la sección de contratos
-                        </FormDescription>
+                        <FormLabel>Contratos</FormLabel>
                       </div>
                     </FormItem>
                   )}
@@ -616,10 +663,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
-                        <FormLabel>Ver Formaciones</FormLabel>
-                        <FormDescription>
-                          Permite acceso a la sección de formaciones
-                        </FormDescription>
+                        <FormLabel>Formaciones</FormLabel>
                       </div>
                     </FormItem>
                   )}
@@ -637,10 +681,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
-                        <FormLabel>Ver Facturas</FormLabel>
-                        <FormDescription>
-                          Permite acceso a la sección de facturas
-                        </FormDescription>
+                        <FormLabel>Facturas</FormLabel>
                       </div>
                     </FormItem>
                   )}
@@ -648,27 +689,46 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
               </div>
             </div>
 
-            {/* Estado del usuario */}
-            <FormField
-              control={form.control}
-              name="active"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Usuario Activo</FormLabel>
-                    <FormDescription>
-                      Desmarcar para desactivar el acceso del usuario
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
+            {/* ✅ USUARIO ACTIVO - Switch con contenedor separado */}
+            <div className="border-t pt-6">
+              <div className="bg-gray-50 rounded-lg p-4 border">
+                <FormField
+                  control={form.control}
+                  name="active"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between space-y-0">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-sm font-medium">
+                          Estado del Usuario
+                        </FormLabel>
+                        <FormDescription>
+                          {field.value 
+                            ? "El usuario tiene acceso activo al sistema" 
+                            : "El usuario está desactivado y no puede acceder"
+                          }
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-xs font-medium ${field.value ? 'text-green-600' : 'text-red-600'}`}>
+                            {field.value ? 'Activo' : 'Inactivo'}
+                          </span>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            className={`${
+                              field.value 
+                                ? 'bg-green-600 focus-visible:ring-green-600' 
+                                : 'bg-red-600 focus-visible:ring-red-600'
+                            }`}
+                          />
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleClose}>
