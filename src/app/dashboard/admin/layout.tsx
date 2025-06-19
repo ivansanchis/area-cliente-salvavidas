@@ -1,8 +1,8 @@
-// src/app/dashboard/admin/layout.tsx
+// src/app/dashboard/admin/layout.tsx - CON SOLO 2 PESTAÑAS
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -13,6 +13,7 @@ export default function AdminLayout({
 }) {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (status === "loading") return
@@ -65,6 +66,10 @@ export default function AdminLayout({
     )
   }
 
+  // ✅ DETERMINAR PESTAÑA ACTIVA
+  const isUsersTab = pathname === '/dashboard/admin' || pathname.startsWith('/dashboard/admin/users')
+  const isActivityTab = pathname === '/dashboard/admin/activity'
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header del Admin */}
@@ -106,27 +111,32 @@ export default function AdminLayout({
         </div>
       </header>
 
-      {/* Navegación del Admin */}
+      {/* ✅ NAVEGACIÓN CON SOLO 2 PESTAÑAS */}
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8">
+            {/* Pestaña Usuarios */}
             <button
               onClick={() => router.push("/dashboard/admin")}
-              className="border-b-2 border-blue-500 py-4 px-1 text-sm font-medium text-blue-600"
+              className={`border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
+                isUsersTab
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
               Usuarios
             </button>
+            
+            {/* Pestaña Actividad */}
             <button
               onClick={() => router.push("/dashboard/admin/activity")}
-              className="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              className={`border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
+                isActivityTab
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
               Actividad
-            </button>
-            <button
-              onClick={() => router.push("/dashboard/admin/stats")}
-              className="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            >
-              Estadísticas
             </button>
           </div>
         </div>
