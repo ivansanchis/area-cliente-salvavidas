@@ -1,134 +1,70 @@
-import { NextAuthOptions } from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "@/lib/prisma"
-import bcrypt from "bcryptjs"
+// src/lib/admin-auth.ts - CORREGIDO PARA NEXT.JS 15
 
-export const authOptions: NextAuthOptions = {
-  providers: [
-    CredentialsProvider({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        console.log('🔍 Authorize called with:', credentials?.email)
-        
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
+import { cookies } from 'next/headers'
+import { decode } from 'next-auth/jwt'
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email
-          }
-        })
+export interface AdminCheckResult {
+  isAdmin: boolean
+  user?: {
+    email: string
+    accessType: string
+  }
+}
 
-        if (!user || !user.active) {
-          console.log('❌ User not found or inactive')
-          return null
-        }
+/**
+ * Verifica if el usuario actual es administrador basándose en las cookies
+ * Compatible con Next.js 15 (cookies debe ser awaited)
+ */
+export async function verifyAdminFromCookies(): Promise<AdminCheckResult> {
+  try {
+    console.log('🔍 verifyAdminFromCookies: Starting verification...')
+    
+    // ✅ AWAIT cookies() para Next.js 15
+    const cookieStore = await cookies()
+    
+    // Buscar la cookie de sesión (nombre estándar de NextAuth)
+    const sessionToken = cookieStore.get('next-auth.session-token')?.value || 
+                        cookieStore.get('__Secure-next-auth.session-token')?.value
 
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
+    if (!sessionToken) {
+      console.log('❌ No session token found in cookies')
+      return { isAdmin: false }
+    }
 
-        if (!isPasswordValid) {
-          console.log('❌ Invalid password')
-          return null
-        }
-        
-        console.log('✅ Login successful for user:', {
-          email: user.email,
-          accessType: user.accessType,
-          accessId: user.accessId
-        })
-        
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          accessType: user.accessType,
-          accessId: user.accessId,
-          canViewContratos: user.canViewContratos,
-          canViewFormaciones: user.canViewFormaciones,
-          canViewFacturas: user.canViewFacturas,
-        }
-      }
+    console.log('✅ Session token found')
+
+    // Decodificar el JWT usando el mismo secret que NextAuth
+    const decoded = await decode({
+      token: sessionToken,
+      secret: process.env.NEXTAUTH_SECRET!,
     })
-  ],
-  session: {
-    strategy: "jwt",
-    // ✅ AÑADIR configuración específica
-    maxAge: 30 * 24 * 60 * 60, // 30 días
-  },
-  // ✅ CONFIGURACIÓN JWT específica para evitar problemas de encriptación
-  jwt: {
-    maxAge: 30 * 24 * 60 * 60, // 30 días
-    // ✅ FORZAR algoritmo específico para evitar problemas
-    encode: async ({ token, secret }) => {
-      const jwt = require('jsonwebtoken')
-      return jwt.sign(token, secret, { algorithm: 'HS256' })
-    },
-    decode: async ({ token, secret }) => {
-      const jwt = require('jsonwebtoken')
-      try {
-        return jwt.verify(token, secret, { algorithms: ['HS256'] })
-      } catch (error) {
-        console.error('JWT decode error:', error)
-        return null
-      }
-    },
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      console.log('🔧 JWT callback - user:', user)
-      console.log('🔧 JWT callback - token:', token)
-      
-      if (user) {
-        token.accessType = user.accessType
-        token.accessId = user.accessId
-        token.canViewContratos = user.canViewContratos
-        token.canViewFormaciones = user.canViewFormaciones
-        token.canViewFacturas = user.canViewFacturas
-      }
-      return token
-    },
-    async session({ session, token }) {
-      console.log('🔧 Session callback - token:', token)
-      console.log('🔧 Session callback - session before:', session)
-      
-      if (session?.user) {
-        session.user.id = token.sub!
-        session.user.accessType = token.accessType as string
-        session.user.accessId = token.accessId as string
-        session.user.canViewContratos = token.canViewContratos as boolean
-        session.user.canViewFormaciones = token.canViewFormaciones as boolean
-        session.user.canViewFacturas = token.canViewFacturas as boolean
-      }
-      
-      console.log('🔧 Session callback - session after:', session)
-      return session
+
+    if (!decoded) {
+      console.log('❌ Failed to decode session token')
+      return { isAdmin: false }
     }
-  },
-  // ✅ CONFIGURACIÓN de cookies específica
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: false, // ✅ false para desarrollo local
-        domain: undefined // ✅ undefined para localhost
-      }
+
+    console.log('🔍 Decoded token data:', {
+      email: decoded.email,
+      accessType: decoded.accessType,
+      accessId: decoded.accessId
+    })
+
+    // Verificar if es administrador basándose en accessType
+    const isAdmin = decoded.accessType === 'ADMIN'
+
+    console.log(`${isAdmin ? '✅' : '❌'} Admin check result: ${isAdmin}`)
+
+    return {
+      isAdmin,
+      user: decoded.email ? {
+        email: decoded.email as string,
+        accessType: decoded.accessType as string
+      } : undefined
     }
-  },
-  pages: {
-    signIn: "/login",
-  },
-  secret: process.env.NEXTAUTH_SECRET,
-  // ✅ DESACTIVAR debug en producción, mantener en desarrollo
-  debug: process.env.NODE_ENV === 'development',
+
+  } catch (error) {
+    console.error('❌ Error in verifyAdminFromCookies:', error)
+    return { isAdmin: false }
+  }
 }

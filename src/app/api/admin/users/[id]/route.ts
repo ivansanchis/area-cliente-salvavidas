@@ -1,355 +1,30 @@
-// src/app/api/admin/users/[id]/route.ts
+// src/app/api/admin/users/[id]/route.ts - CORREGIDO DELETE PARA HARD DELETE
+
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
 import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
+import { verifyAdminFromCookies } from '@/lib/admin-auth'
 
-// ✅ FUNCIÓN HELPER para verificar admin (igual que en route.ts principal)
-async function verifyAdminAccess() {
+interface Params {
+  params: Promise<{
+    id: string
+  }>
+}
+
+// GET - Obtener usuario por ID
+export async function GET(request: NextRequest, { params }: Params) {
   try {
-    console.log('🔍 Verifying admin access...')
+    const { id } = await params
     
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.email) {
-      console.log('❌ No NextAuth session found')
-      return { isValid: false, error: 'No hay sesión activa' }
+    const adminCheck = await verifyAdminFromCookies()
+    if (!adminCheck.isAdmin) {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { 
-        id: true,
-        email: true,
-        role: true, 
-        active: true,
-        accessType: true
-      }
-    })
-
-    if (!user || !user.active) {
-      return { isValid: false, error: 'Usuario no encontrado o inactivo' }
-    }
-
-    // ✅ VERIFICACIÓN FLEXIBLE
-    const isAdmin = user.role === 'ADMIN' || 
-                   user.accessType === 'ADMIN' || 
-                   user.accessType === 'admin' || 
-                   user.email === 'test@salvavidas.com'
-    
-    if (!isAdmin) {
-      return { isValid: false, error: 'Acceso denegado - permisos insuficientes' }
-    }
-
-    return { isValid: true, user }
-
-  } catch (error) {
-    console.error('❌ Error verifying admin access:', error)
-    return { isValid: false, error: 'Error interno del servidor' }
-  }
-}
-
-interface UpdateUserRequest {
-  email?: string
-  password?: string
-  nombre?: string
-  apellidos?: string
-  grupoAsignado?: string
-  empresaAsignada?: string
-  role?: 'ADMIN' | 'GRUPO' | 'EMPRESA' | 'DISPOSITIVO'
-  accessType?: string
-  accessId?: string
-  canViewContratos?: boolean
-  canViewFormaciones?: boolean
-  canViewFacturas?: boolean
-  active?: boolean
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    console.log('🔄 PUT /api/admin/users/[id] - Updating user:', params.id)
-    
-    // Verificar acceso de administrador
-    const adminCheck = await verifyAdminAccess()
-    if (!adminCheck.isValid) {
-      console.log('❌ Access denied:', adminCheck.error)
-      return NextResponse.json({ error: adminCheck.error }, { status: 401 })
-    }
-
-    const userId = params.id
-    if (!userId) {
-      return NextResponse.json({ error: 'ID de usuario requerido' }, { status: 400 })
-    }
-
-    // Verificar que el usuario existe
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        apellidos: true,
-        role: true,
-        accessType: true,
-        accessId: true,
-        grupoAsignado: true,
-        empresaAsignada: true,
-        canViewContratos: true,
-        canViewFormaciones: true,
-        canViewFacturas: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    })
-
-    if (!existingUser) {
-      console.log(`❌ User not found: ${userId}`)
-      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
-    }
-
-    console.log('📊 Existing user data:', existingUser)
-
-    // Parsear datos del request
-    const updateData: UpdateUserRequest = await request.json()
-    console.log('📝 Update data received:', updateData)
-
-    // Validaciones
-    if (updateData.email && updateData.email !== existingUser.email) {
-      // Verificar que el nuevo email no esté en uso
-      const emailExists = await prisma.user.findUnique({
-        where: { email: updateData.email },
-        select: { id: true }
-      })
-      
-      if (emailExists && emailExists.id !== userId) {
-        return NextResponse.json({ 
-          error: 'El email ya está en uso por otro usuario' 
-        }, { status: 400 })
-      }
-    }
-
-    // Preparar datos para actualización
-    const dataToUpdate: any = {}
-
-    // Campos básicos
-    if (updateData.email !== undefined && updateData.email !== existingUser.email) {
-      dataToUpdate.email = updateData.email
-    }
-    
-    if (updateData.nombre !== undefined && updateData.nombre !== existingUser.nombre) {
-      dataToUpdate.nombre = updateData.nombre
-    }
-    
-    if (updateData.apellidos !== undefined && updateData.apellidos !== existingUser.apellidos) {
-      dataToUpdate.apellidos = updateData.apellidos
-    }
-
-    // Grupo y empresa asignados
-    if (updateData.grupoAsignado !== undefined && updateData.grupoAsignado !== existingUser.grupoAsignado) {
-      dataToUpdate.grupoAsignado = updateData.grupoAsignado
-      
-      // Si cambia el grupo, actualizar también grupoId
-      if (updateData.grupoAsignado) {
-        const grupo = await prisma.grupo.findFirst({
-          where: { nombre: updateData.grupoAsignado },
-          select: { idGrupo: true }
-        })
-        if (grupo) {
-          dataToUpdate.grupoId = grupo.idGrupo
-        }
-      } else {
-        dataToUpdate.grupoId = null
-      }
-    }
-    
-    if (updateData.empresaAsignada !== undefined && updateData.empresaAsignada !== existingUser.empresaAsignada) {
-      dataToUpdate.empresaAsignada = updateData.empresaAsignada
-      
-      // Si cambia la empresa, actualizar también empresaId
-      if (updateData.empresaAsignada) {
-        const empresa = await prisma.empresa.findFirst({
-          where: { nombreCliente: updateData.empresaAsignada },
-          select: { idSage: true }
-        })
-        if (empresa) {
-          dataToUpdate.empresaId = empresa.idSage
-        }
-      } else {
-        dataToUpdate.empresaId = null
-      }
-    }
-
-    // Sistema de roles y acceso
-    if (updateData.role !== undefined && updateData.role !== existingUser.role) {
-      dataToUpdate.role = updateData.role
-    }
-    
-    if (updateData.accessType !== undefined && updateData.accessType !== existingUser.accessType) {
-      dataToUpdate.accessType = updateData.accessType
-    }
-    
-    if (updateData.accessId !== undefined && updateData.accessId !== existingUser.accessId) {
-      dataToUpdate.accessId = updateData.accessId
-    }
-
-    // Permisos granulares
-    if (updateData.canViewContratos !== undefined && updateData.canViewContratos !== existingUser.canViewContratos) {
-      dataToUpdate.canViewContratos = updateData.canViewContratos
-    }
-    
-    if (updateData.canViewFormaciones !== undefined && updateData.canViewFormaciones !== existingUser.canViewFormaciones) {
-      dataToUpdate.canViewFormaciones = updateData.canViewFormaciones
-    }
-    
-    if (updateData.canViewFacturas !== undefined && updateData.canViewFacturas !== existingUser.canViewFacturas) {
-      dataToUpdate.canViewFacturas = updateData.canViewFacturas
-    }
-
-    // Estado activo/inactivo
-    if (updateData.active !== undefined && updateData.active !== existingUser.active) {
-      dataToUpdate.active = updateData.active
-    }
-
-    // Contraseña (si se proporciona)
-    if (updateData.password && updateData.password.trim().length > 0) {
-      console.log('🔑 Updating password')
-      const hashedPassword = await bcrypt.hash(updateData.password, 12)
-      dataToUpdate.password = hashedPassword
-    }
-
-    console.log('📝 Final data to update:', Object.keys(dataToUpdate))
-
-    // Si no hay cambios, devolver el usuario actual
-    if (Object.keys(dataToUpdate).length === 0) {
-      console.log('ℹ️ No changes detected')
-      return NextResponse.json({
-        message: 'No hay cambios para actualizar',
-        user: existingUser
-      })
-    }
-
-    // Actualizar usuario en la base de datos
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: dataToUpdate,
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        apellidos: true,
-        role: true,
-        accessType: true,
-        accessId: true,
-        grupoAsignado: true,
-        empresaAsignada: true,
-        canViewContratos: true,
-        canViewFormaciones: true,
-        canViewFacturas: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    })
-
-    console.log('✅ User updated successfully:', updatedUser.id)
-
-    // Registrar actividad en el log (opcional)
-    try {
-      await prisma.activityLog.create({
-        data: {
-          userId: adminCheck.user!.id,
-          action: 'UPDATE_USER',
-          details: JSON.stringify({
-            targetUserId: userId,
-            targetUserEmail: updatedUser.email,
-            changedFields: Object.keys(dataToUpdate),
-            passwordChanged: !!updateData.password
-          }),
-          metadata: JSON.stringify({
-            userAgent: request.headers.get('user-agent'),
-            ip: request.headers.get('x-forwarded-for') || 'unknown'
-          })
-        }
-      })
-    } catch (logError) {
-      console.warn('⚠️ Failed to log activity:', logError)
-      // No fallar la operación principal por un error de logging
-    }
-
-    return NextResponse.json({
-      message: 'Usuario actualizado exitosamente',
-      user: updatedUser
-    })
-
-  } catch (error) {
-    console.error('❌ Error updating user:', error)
-    
-    if (error instanceof Error) {
-      // Errores de validación de Prisma
-      if (error.message.includes('Unique constraint')) {
-        return NextResponse.json({ 
-          error: 'El email ya está en uso' 
-        }, { status: 400 })
-      }
-      
-      // Otros errores de validación
-      if (error.message.includes('Invalid')) {
-        return NextResponse.json({ 
-          error: 'Datos de entrada inválidos' 
-        }, { status: 400 })
-      }
-    }
-
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
-  }
-}
-
-// También agregamos GET para obtener un usuario específico (útil para debugging)
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    console.log('🔍 GET /api/admin/users/[id] - Getting user:', params.id)
-    
-    // Verificar acceso de administrador
-    const adminCheck = await verifyAdminAccess()
-    if (!adminCheck.isValid) {
-      return NextResponse.json({ error: adminCheck.error }, { status: 401 })
-    }
-
-    const userId = params.id
-    if (!userId) {
-      return NextResponse.json({ error: 'ID de usuario requerido' }, { status: 400 })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        apellidos: true,
-        role: true,
-        accessType: true,
-        accessId: true,
-        grupoAsignado: true,
-        empresaAsignada: true,
-        canViewContratos: true,
-        canViewFormaciones: true,
-        canViewFacturas: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-        lastLogin: true
+      where: { id },
+      include: {
+        grupo: true,
+        empresa: true
       }
     })
 
@@ -358,12 +33,216 @@ export async function GET(
     }
 
     return NextResponse.json(user)
+  } catch (error) {
+    console.error('Error fetching user:', error)
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+  }
+}
+
+// PUT - Actualizar usuario
+export async function PUT(request: NextRequest, { params }: Params) {
+  try {
+    const { id } = await params
+    
+    console.log('🔧 PUT /api/admin/users/[id] - Starting update for user:', id)
+    
+    const adminCheck = await verifyAdminFromCookies()
+    if (!adminCheck.isAdmin) {
+      console.log('❌ Access denied - not admin')
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    console.log('📝 Request body:', body)
+    
+    const {
+      nombre,
+      apellidos,
+      role,
+      accessType,
+      accessId,
+      grupoId,
+      empresaId,
+      dispositivoId,
+      canViewContratos,
+      canViewFormaciones,
+      canViewFacturas,
+      active
+    } = body
+
+    // Validar que el usuario existe
+    const existingUser = await prisma.user.findUnique({
+      where: { id }
+    })
+
+    if (!existingUser) {
+      console.log('❌ User not found:', id)
+      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+    }
+
+    console.log('✅ User found, proceeding with validations...')
+
+    // ✅ RESOLVER FOREIGN KEYS CORRECTAS
+    let finalGrupoId: string | null = null
+    let finalEmpresaId: string | null = null
+    let finalDispositivoId: string | null = null
+
+    // Validaciones según el role
+    if (role === 'GRUPO' && !grupoId) {
+      console.log('❌ Validation failed: grupoId required for GRUPO role')
+      return NextResponse.json({ error: 'grupoId es requerido para role GRUPO' }, { status: 400 })
+    }
+
+    if (role === 'EMPRESA' && (!empresaId || !grupoId)) {
+      console.log('❌ Validation failed: empresaId and grupoId required for EMPRESA role')
+      return NextResponse.json({ error: 'empresaId y grupoId son requeridos para role EMPRESA' }, { status: 400 })
+    }
+
+    if (role === 'DISPOSITIVO' && !dispositivoId) {
+      console.log('❌ Validation failed: dispositivoId required for DISPOSITIVO role')
+      return NextResponse.json({ error: 'dispositivoId es requerido para role DISPOSITIVO' }, { status: 400 })
+    }
+
+    // ✅ VALIDAR Y OBTENER LOS VALORES CORRECTOS PARA FOREIGN KEYS
+    if (grupoId) {
+      const grupo = await prisma.grupo.findUnique({ where: { id: grupoId } })
+      if (!grupo) {
+        console.log('❌ Grupo not found:', grupoId)
+        return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 400 })
+      }
+      finalGrupoId = grupo.idGrupo // ✅ Usar idGrupo para la foreign key
+      console.log('✅ Grupo validated:', grupo.nombre, 'idGrupo:', finalGrupoId)
+    }
+
+    if (empresaId) {
+      const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } })
+      if (!empresa) {
+        console.log('❌ Empresa not found:', empresaId)
+        return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 400 })
+      }
+      finalEmpresaId = empresa.idSage // ✅ Usar idSage para la foreign key
+      console.log('✅ Empresa validated:', empresa.nombreCliente, 'idSage:', finalEmpresaId)
+    }
+
+    if (dispositivoId) {
+      const dispositivo = await prisma.dispositivo.findUnique({ where: { id: dispositivoId } })
+      if (!dispositivo) {
+        console.log('❌ Dispositivo not found:', dispositivoId)
+        return NextResponse.json({ error: 'Dispositivo no encontrado' }, { status: 400 })
+      }
+      finalDispositivoId = dispositivo.numeroSerie // ✅ Usar numeroSerie para la referencia
+      console.log('✅ Dispositivo validated:', dispositivo.numeroSerie)
+    }
+
+    console.log('🔄 Updating user in database...')
+    console.log('📊 Final foreign key values:', {
+      finalGrupoId,
+      finalEmpresaId,
+      finalDispositivoId
+    })
+
+    // ✅ ACTUALIZAR USUARIO CON FOREIGN KEYS CORRECTAS
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        nombre,
+        apellidos,
+        role,
+        accessType,
+        accessId,
+        grupoId: finalGrupoId, // ✅ Ahora usa el idGrupo correcto
+        empresaId: finalEmpresaId, // ✅ Ahora usa el idSage correcto
+        dispositivoId: finalDispositivoId, // ✅ Ahora usa el numeroSerie correcto
+        canViewContratos: canViewContratos ?? true,
+        canViewFormaciones: canViewFormaciones ?? true,
+        canViewFacturas: canViewFacturas ?? true,
+        active: active ?? true,
+        updatedAt: new Date()
+      },
+      include: {
+        grupo: true,
+        empresa: true
+      }
+    })
+
+    console.log('✅ User updated successfully:', updatedUser.email)
+    return NextResponse.json(updatedUser)
 
   } catch (error) {
-    console.error('❌ Error getting user:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    console.error('❌ Error updating user:', error)
+    
+    // Proporcionar más detalles del error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorDetails = {
+      error: 'Error interno del servidor',
+      details: errorMessage,
+      timestamp: new Date().toISOString(),
+      // ✅ Agregar información específica si es error de Prisma
+      ...(error && typeof error === 'object' && 'code' in error && {
+        prismaError: {
+          code: (error as any).code,
+          meta: (error as any).meta
+        }
+      })
+    }
+    
+    return NextResponse.json(errorDetails, { status: 500 })
+  }
+}
+
+// ✅ DELETE - HARD DELETE (ELIMINACIÓN PERMANENTE)
+export async function DELETE(request: NextRequest, { params }: Params) {
+  try {
+    const { id } = await params
+    
+    console.log('🗑️ DELETE /api/admin/users/[id] - Hard deleting user:', id)
+    
+    const adminCheck = await verifyAdminFromCookies()
+    if (!adminCheck.isAdmin) {
+      console.log('❌ Access denied - not admin')
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    // Verificar que el usuario existe
+    const user = await prisma.user.findUnique({
+      where: { id }
+    })
+
+    if (!user) {
+      console.log('❌ User not found:', id)
+      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+    }
+
+    // Verificar que no se está eliminando a sí mismo
+    if (user.email === adminCheck.user?.email) {
+      console.log('❌ Cannot delete self')
+      return NextResponse.json({ error: 'No puedes eliminarte a ti mismo' }, { status: 400 })
+    }
+
+    console.log('🔄 Permanently deleting user from database...')
+
+    // ✅ HARD DELETE - Eliminar permanentemente de la base de datos
+    const deletedUser = await prisma.user.delete({
+      where: { id }
+    })
+
+    console.log('✅ User permanently deleted:', deletedUser.email)
+
+    return NextResponse.json({ 
+      message: 'Usuario eliminado permanentemente',
+      user: deletedUser
+    })
+
+  } catch (error) {
+    console.error('❌ Error deleting user:', error)
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorDetails = {
+      error: 'Error interno del servidor',
+      details: errorMessage,
+      timestamp: new Date().toISOString()
+    }
+    
+    return NextResponse.json(errorDetails, { status: 500 })
   }
 }

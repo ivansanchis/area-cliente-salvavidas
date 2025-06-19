@@ -1,3 +1,5 @@
+// src/lib/auth.ts - CONFIGURACIÓN NEXTAUTH
+
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
@@ -59,7 +61,11 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 días
+  },
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 días
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -92,9 +98,21 @@ export const authOptions: NextAuthOptions = {
       return session
     }
   },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: false, // false para desarrollo local
+        domain: undefined // undefined para localhost
+      }
+    }
+  },
   pages: {
     signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
-  debug: true,
+  debug: process.env.NODE_ENV === 'development',
 }

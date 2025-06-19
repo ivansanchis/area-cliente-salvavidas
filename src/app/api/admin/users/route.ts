@@ -1,89 +1,9 @@
-// src/app/api/admin/users/route.ts - SOLUCIÓN SIN getServerSession
+// src/app/api/admin/users/route.ts - CORREGIDO PARA NEXT.JS 15 Y FOREIGN KEYS
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { cookies } from 'next/headers'
-
-// ✅ FUNCIÓN SIMPLE para verificar admin sin NextAuth server-side
-async function verifyAdminFromCookies() {
-  try {
-    console.log('🔍 Verifying admin from cookies...')
-    
-    const cookieStore = cookies()
-    
-    // Buscar cookie de sesión
-    const sessionCookie = cookieStore.get('next-auth.session-token') || 
-                         cookieStore.get('__Secure-next-auth.session-token')
-    
-    console.log('🔍 Session cookie found:', !!sessionCookie)
-    
-    if (!sessionCookie) {
-      console.log('❌ No session cookie found')
-      return { isValid: false, error: 'No hay cookie de sesión' }
-    }
-
-    // ✅ HACER petición interna al endpoint de NextAuth que SÍ funciona
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    
-    try {
-      const sessionResponse = await fetch(`${baseUrl}/api/auth/session`, {
-        headers: {
-          'Cookie': cookieStore.toString()
-        },
-        cache: 'no-store'
-      })
-
-      if (!sessionResponse.ok) {
-        console.log('❌ Session API failed:', sessionResponse.status)
-        return { isValid: false, error: 'No se pudo verificar sesión' }
-      }
-
-      const sessionData = await sessionResponse.json()
-      console.log('✅ Session data from API:', {
-        hasUser: !!sessionData?.user,
-        email: sessionData?.user?.email,
-        accessType: sessionData?.user?.accessType
-      })
-
-      if (!sessionData?.user?.email) {
-        console.log('❌ No user in session')
-        return { isValid: false, error: 'No hay usuario en la sesión' }
-      }
-
-      // Verificar que es admin desde la sesión directamente
-      const userAccessType = sessionData.user.accessType
-      const userEmail = sessionData.user.email
-      
-      console.log('🔍 Checking admin status:', { email: userEmail, accessType: userAccessType })
-
-      // ✅ VERIFICACIÓN FLEXIBLE desde la sesión
-      const isAdmin = userAccessType === 'ADMIN' || 
-                     userAccessType === 'admin' || 
-                     userEmail === 'test@salvavidas.com'
-
-      if (!isAdmin) {
-        console.log(`❌ User ${userEmail} is not admin (accessType: ${userAccessType})`)
-        return { isValid: false, error: 'Acceso denegado - no es admin' }
-      }
-
-      console.log(`✅ Admin access verified for: ${userEmail}`)
-      return { 
-        isValid: true, 
-        user: {
-          email: userEmail,
-          accessType: userAccessType
-        }
-      }
-
-    } catch (fetchError) {
-      console.error('❌ Error fetching session:', fetchError)
-      return { isValid: false, error: 'Error al verificar sesión' }
-    }
-
-  } catch (error) {
-    console.error('❌ Error in verifyAdminFromCookies:', error)
-    return { isValid: false, error: 'Error interno de verificación' }
-  }
-}
+import { verifyAdminFromCookies } from '@/lib/admin-auth'
+import bcrypt from 'bcryptjs'
 
 export async function GET(request: NextRequest) {
   try {
@@ -91,66 +11,32 @@ export async function GET(request: NextRequest) {
     
     const adminCheck = await verifyAdminFromCookies()
     
-    if (!adminCheck.isValid) {
-      console.log('❌ Admin access denied:', adminCheck.error)
-      return NextResponse.json({ 
-        error: adminCheck.error || 'Acceso denegado',
-        debug: 'Admin verification failed'
-      }, { status: 401 })
+    if (!adminCheck.isAdmin) {
+      console.log('❌ Admin access denied')
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
     }
 
     console.log(`✅ Admin access verified: ${adminCheck.user?.email}`)
 
-    // Obtener todos los usuarios
+    // Obtener todos los usuarios con relaciones
     const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        apellidos: true,
-        name: true,
-        role: true,
-        accessType: true,
-        accessId: true,
-        grupoAsignado: true,    
-        empresaAsignada: true,  
-        canViewContratos: true,
-        canViewFormaciones: true,
-        canViewFacturas: true,
-        active: true,
-        lastLogin: true,
-        createdAt: true,
-        updatedAt: true,
-        createdBy: true,
-        updatedBy: true,
+      include: {
+        grupo: true,
+        empresa: true
       },
       orderBy: [
-        { role: 'asc' },
+        { accessType: 'asc' },
         { createdAt: 'desc' }
       ]
     })
 
     console.log(`📊 Found ${users.length} users`)
 
-    // Formatear fechas para el frontend
-    const usersFormatted = users.map(user => ({
-      ...user,
-      lastLogin: user.lastLogin?.toISOString() || null,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    }))
-
-    return NextResponse.json(usersFormatted)
+    return NextResponse.json(users)
 
   } catch (error) {
     console.error('❌ Error fetching users:', error)
-    return NextResponse.json(
-      { 
-        error: 'Error interno del servidor',
-        debug: error.message
-      }, 
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
@@ -160,19 +46,19 @@ export async function POST(request: NextRequest) {
     
     const adminCheck = await verifyAdminFromCookies()
     
-    if (!adminCheck.isValid) {
-      console.log('❌ Admin access denied for user creation:', adminCheck.error)
-      return NextResponse.json({ error: adminCheck.error || 'Acceso denegado' }, { status: 401 })
+    if (!adminCheck.isAdmin) {
+      console.log('❌ Admin access denied for user creation')
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
     }
 
     const body = await request.json()
+    console.log('📝 Request body for new user:', body)
+    
     const { 
       email, 
       password, 
       nombre, 
       apellidos,
-      grupoAsignado,     
-      empresaAsignada,   
       role, 
       accessType, 
       accessId,
@@ -186,9 +72,8 @@ export async function POST(request: NextRequest) {
 
     // Validar campos requeridos
     if (!email || !password || !nombre || !apellidos || !role || !accessType || !accessId) {
-      return NextResponse.json({ 
-        error: 'Faltan campos requeridos' 
-      }, { status: 400 })
+      console.log('❌ Missing required fields')
+      return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
     }
 
     // Verificar que el email no existe
@@ -197,16 +82,70 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
-      return NextResponse.json({ 
-        error: 'Ya existe un usuario con este email' 
-      }, { status: 400 })
+      console.log('❌ Email already exists:', email)
+      return NextResponse.json({ error: 'Ya existe un usuario con este email' }, { status: 400 })
+    }
+
+    // ✅ RESOLVER FOREIGN KEYS CORRECTAS (igual que en edición)
+    let finalGrupoId: string | null = null
+    let finalEmpresaId: string | null = null
+    let finalDispositivoId: string | null = null
+
+    // Validaciones según el role y obtener foreign keys correctas
+    if (role === 'GRUPO' && !grupoId) {
+      return NextResponse.json({ error: 'grupoId es requerido para role GRUPO' }, { status: 400 })
+    }
+
+    if (role === 'EMPRESA' && (!empresaId || !grupoId)) {
+      return NextResponse.json({ error: 'empresaId y grupoId son requeridos para role EMPRESA' }, { status: 400 })
+    }
+
+    if (role === 'DISPOSITIVO' && !dispositivoId) {
+      return NextResponse.json({ error: 'dispositivoId es requerido para role DISPOSITIVO' }, { status: 400 })
+    }
+
+    // ✅ VALIDAR Y OBTENER LOS VALORES CORRECTOS PARA FOREIGN KEYS
+    if (grupoId) {
+      const grupo = await prisma.grupo.findUnique({ where: { id: grupoId } })
+      if (!grupo) {
+        console.log('❌ Grupo not found:', grupoId)
+        return NextResponse.json({ error: 'Grupo no encontrado' }, { status: 400 })
+      }
+      finalGrupoId = grupo.idGrupo // ✅ Usar idGrupo para la foreign key
+      console.log('✅ Grupo validated:', grupo.nombre, 'idGrupo:', finalGrupoId)
+    }
+
+    if (empresaId) {
+      const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } })
+      if (!empresa) {
+        console.log('❌ Empresa not found:', empresaId)
+        return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 400 })
+      }
+      finalEmpresaId = empresa.idSage // ✅ Usar idSage para la foreign key
+      console.log('✅ Empresa validated:', empresa.nombreCliente, 'idSage:', finalEmpresaId)
+    }
+
+    if (dispositivoId) {
+      const dispositivo = await prisma.dispositivo.findUnique({ where: { id: dispositivoId } })
+      if (!dispositivo) {
+        console.log('❌ Dispositivo not found:', dispositivoId)
+        return NextResponse.json({ error: 'Dispositivo no encontrado' }, { status: 400 })
+      }
+      finalDispositivoId = dispositivo.numeroSerie // ✅ Usar numeroSerie para la referencia
+      console.log('✅ Dispositivo validated:', dispositivo.numeroSerie)
     }
 
     // Hash de la contraseña
-    const bcrypt = require('bcryptjs')
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Crear el usuario
+    console.log('🔄 Creating user in database...')
+    console.log('📊 Final foreign key values:', {
+      finalGrupoId,
+      finalEmpresaId,
+      finalDispositivoId
+    })
+
+    // ✅ CREAR USUARIO CON FOREIGN KEYS CORRECTAS
     const newUser = await prisma.user.create({
       data: {
         email,
@@ -217,55 +156,46 @@ export async function POST(request: NextRequest) {
         role,
         accessType,
         accessId,
-        grupoAsignado: grupoAsignado || null,      
-        empresaAsignada: empresaAsignada || null,    
-        grupoId: grupoId || null,
-        empresaId: empresaId || null,
-        dispositivoId: dispositivoId || null,
+        grupoId: finalGrupoId, // ✅ Ahora usa el idGrupo correcto
+        empresaId: finalEmpresaId, // ✅ Ahora usa el idSage correcto
+        dispositivoId: finalDispositivoId, // ✅ Ahora usa el numeroSerie correcto
         canViewContratos: canViewContratos ?? true,
         canViewFormaciones: canViewFormaciones ?? true,
         canViewFacturas: canViewFacturas ?? true,
         active: true,
         createdBy: adminCheck.user?.email,
+      },
+      include: {
+        grupo: true,
+        empresa: true
       }
     })
 
-    // Crear log de actividad
-    await prisma.activityLog.create({
-      data: {
-        userId: newUser.id,
-        action: 'CREATE_USER',
-        details: JSON.stringify({
-          createdBy: adminCheck.user?.email,
-          userEmail: newUser.email,
-          role: newUser.role,
-          accessType: newUser.accessType
-        }),
-        ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
-        userAgent: request.headers.get('user-agent') || 'unknown'
-      }
-    })
-
-    console.log('✅ New user created by admin:', {
-      adminEmail: adminCheck.user?.email,
-      newUserEmail: newUser.email,
-      role: newUser.role
-    })
+    console.log('✅ New user created successfully:', newUser.email)
 
     // Retornar el usuario sin la contraseña
     const { password: _, ...userWithoutPassword } = newUser
 
-    return NextResponse.json({
-      ...userWithoutPassword,
-      createdAt: userWithoutPassword.createdAt.toISOString(),
-      updatedAt: userWithoutPassword.updatedAt.toISOString(),
-    })
+    return NextResponse.json(userWithoutPassword)
 
   } catch (error) {
     console.error('❌ Error creating user:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' }, 
-      { status: 500 }
-    )
+    
+    // Proporcionar más detalles del error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorDetails = {
+      error: 'Error interno del servidor',
+      details: errorMessage,
+      timestamp: new Date().toISOString(),
+      // ✅ Agregar información específica si es error de Prisma
+      ...(error && typeof error === 'object' && 'code' in error && {
+        prismaError: {
+          code: (error as any).code,
+          meta: (error as any).meta
+        }
+      })
+    }
+    
+    return NextResponse.json(errorDetails, { status: 500 })
   }
 }
