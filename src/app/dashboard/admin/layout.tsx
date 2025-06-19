@@ -1,10 +1,10 @@
-// src/app/dashboard/admin/layout.tsx - CON SOLO 2 PESTAÑAS
 "use client"
 
 import { useSession } from "next-auth/react"
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
 export default function AdminLayout({
   children,
@@ -24,7 +24,6 @@ export default function AdminLayout({
     }
 
     // Verificar que el usuario sea ADMIN
-    // Como aún no tenemos el campo 'role' en la sesión, verificamos por accessType temporal
     const isAdmin = session.user?.email === 'test@salvavidas.com' || 
                    session.user?.accessType === 'admin'
     
@@ -36,8 +35,11 @@ export default function AdminLayout({
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Cargando panel de administración...</div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Cargando panel de administración...</p>
+        </div>
       </div>
     )
   }
@@ -51,7 +53,7 @@ export default function AdminLayout({
   
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center h-64">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-center text-red-600">Acceso Denegado</CardTitle>
@@ -66,86 +68,42 @@ export default function AdminLayout({
     )
   }
 
-  // ✅ DETERMINAR PESTAÑA ACTIVA
-  const isUsersTab = pathname === '/dashboard/admin' || pathname.startsWith('/dashboard/admin/users')
-  const isActivityTab = pathname === '/dashboard/admin/activity'
+  // Determinar pestaña activa basándose en la ruta
+  const activeTab = pathname === '/dashboard/admin/activity' ? 'activity' : 'users'
+
+  const handleTabChange = (value: string) => {
+    if (value === 'users') {
+      router.push('/dashboard/admin')
+    } else if (value === 'activity') {
+      router.push('/dashboard/admin/activity')
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header del Admin */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">SC</span>
-                </div>
-                <div className="ml-3">
-                  <h1 className="text-lg font-semibold text-gray-900">
-                    Panel de Administración
-                  </h1>
-                  <p className="text-xs text-gray-500">Salvavidas Cardio</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  👑 ADMIN
-                </span>
-                <span className="text-sm text-gray-700">
-                  {session.user?.name || session.user?.email}
-                </span>
-              </div>
-              
-              <button
-                onClick={() => router.push("/dashboard")}
-                className="text-sm text-blue-600 hover:text-blue-500"
-              >
-                ← Volver al Dashboard
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-6">
+      {/* Título de la página */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Panel de Administración</h1>
+        <p className="text-muted-foreground">
+          Gestión completa de usuarios y permisos del sistema
+        </p>
+      </div>
 
-      {/* ✅ NAVEGACIÓN CON SOLO 2 PESTAÑAS */}
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8">
-            {/* Pestaña Usuarios */}
-            <button
-              onClick={() => router.push("/dashboard/admin")}
-              className={`border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
-                isUsersTab
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Usuarios
-            </button>
-            
-            {/* Pestaña Actividad */}
-            <button
-              onClick={() => router.push("/dashboard/admin/activity")}
-              className={`border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
-                isActivityTab
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Actividad
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Contenido principal */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
+      {/* Tabs de navegación */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="users">Usuarios</TabsTrigger>
+          <TabsTrigger value="activity">Actividad</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="users" className="mt-6">
+          {activeTab === 'users' && children}
+        </TabsContent>
+        
+        <TabsContent value="activity" className="mt-6">
+          {activeTab === 'activity' && children}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

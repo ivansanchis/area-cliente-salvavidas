@@ -1,12 +1,10 @@
-// src/app/dashboard/admin/page.tsx - CORREGIDA CON CONEXIÓN COMPLETA
-
 import { verifyAdminFromCookies } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import CreateUserDialog from '@/components/admin/CreateUserDialog'
 import AdminUsersManager from '@/components/admin/AdminUsersManager'
-import { Users, Shield, Activity, Building2 } from 'lucide-react'
+import { Users, Activity, Building2 } from 'lucide-react'
 
 async function getUsers() {
   try {
@@ -78,23 +76,20 @@ export default async function AdminPage() {
   ])
 
   return (
-    <div className="container mx-auto p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+    <div className="space-y-6">
+      {/* Header con botón de crear usuario */}
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            <Shield className="inline-block mr-3 h-8 w-8" />
-            Panel de Administración
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Gestión completa de usuarios y permisos del sistema
+          <h2 className="text-2xl font-semibold">Gestión de Usuarios</h2>
+          <p className="text-muted-foreground">
+            Administra usuarios, roles y permisos del sistema
           </p>
         </div>
         <CreateUserDialog />
       </div>
 
-      {/* Enhanced Stats Cards - 3 cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      {/* Enhanced Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Card 1: Total Users */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -135,7 +130,7 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Card 3: Access Types (sin Admin) */}
+        {/* Card 3: Access Types */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Tipos de Acceso</CardTitle>

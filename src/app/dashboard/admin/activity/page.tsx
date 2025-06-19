@@ -1,5 +1,3 @@
-// src/app/dashboard/admin/activity/page.tsx - PÁGINA PRÓXIMAMENTE
-
 import { verifyAdminFromCookies } from '@/lib/admin-auth'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,28 +11,25 @@ export default async function ActivityPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="text-center">
-        <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-          <Activity className="h-8 w-8 text-blue-600" />
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight">Panel de Actividad</h1>
-        <p className="text-muted-foreground mt-2">
+      <div>
+        <h2 className="text-2xl font-semibold">Panel de Actividad</h2>
+        <p className="text-muted-foreground">
           Monitoreo de acciones y eventos del sistema
         </p>
       </div>
 
       {/* Próximamente Card */}
-      <Card className="max-w-2xl mx-auto">
+      <Card>
         <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center gap-2 text-2xl">
-            <Clock className="h-6 w-6 text-orange-500" />
+          <CardTitle className="flex items-center justify-center gap-2 text-xl">
+            <Clock className="h-5 w-5 text-orange-500" />
             Próximamente
           </CardTitle>
         </CardHeader>
         <CardContent className="text-center space-y-6">
-          <p className="text-lg text-muted-foreground">
+          <p className="text-muted-foreground">
             Esta sección estará disponible muy pronto con funcionalidades avanzadas de monitoreo.
           </p>
           
