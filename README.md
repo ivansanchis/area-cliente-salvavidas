@@ -18,13 +18,15 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ### Environment variables
 
-Create a `.env.local` file and ensure the `NEXTAUTH_URL` value matches the origin used in the browser. For local development it usually is:
+Create a `.env.local` file (you can copy `.env.example`) and define the following variables:
 
 ```bash
+DATABASE_URL=<your database connection string>
+NEXTAUTH_SECRET=<a random string used to sign cookies>
 NEXTAUTH_URL=http://localhost:3000
 ```
 
-If the URL does not match, admin API requests will respond with `401 Unauthorized` because the session cookie will not be sent correctly.
+Ensure that `NEXTAUTH_URL` matches the origin used in the browser. If the URL does not match, admin API requests will respond with `401 Unauthorized` because the session cookie will not be sent correctly.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
