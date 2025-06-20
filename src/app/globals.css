@@ -130,9 +130,9 @@
   --sidebar-ring: oklch(0.7 0.15 165);
   
   /* 🎨 VARIABLES CORPORATIVAS EN MODO OSCURO */
-  --brand: #7cc9b5;
+  --brand: #65bda9;
   --brand-foreground: #1a1a1a;
-  --brand-hover: #65bda9;
+  --brand-hover: #7cc9b5;
   --brand-light: #2d4a44;
 }
 

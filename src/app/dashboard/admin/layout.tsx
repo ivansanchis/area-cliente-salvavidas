@@ -23,11 +23,17 @@ export default function AdminLayout({
       return
     }
 
-    // Verificar que el usuario sea ADMIN
-    const isAdmin = session.user?.email === 'test@salvavidas.com' || 
-                   session.user?.accessType === 'admin'
+    // ✅ CORREGIDO: Verificar que el usuario sea ADMIN por accessType
+    const isAdmin = session.user?.accessType === 'ADMIN'
+    
+    console.log('🔍 Admin check:', {
+      email: session.user?.email,
+      accessType: session.user?.accessType,
+      isAdmin
+    })
     
     if (!isAdmin) {
+      console.log('❌ Access denied to admin panel')
       router.push("/dashboard")
       return
     }
@@ -48,8 +54,8 @@ export default function AdminLayout({
     return null
   }
 
-  // Verificación temporal hasta actualizar NextAuth
-  const isAdmin = session.user?.email === 'test@salvavidas.com'
+  // ✅ CORREGIDO: Verificación basada en accessType, no en email hardcodeado
+  const isAdmin = session.user?.accessType === 'ADMIN'
   
   if (!isAdmin) {
     return (
@@ -61,6 +67,9 @@ export default function AdminLayout({
           <CardContent>
             <p className="text-center text-gray-600">
               No tienes permisos para acceder al panel de administración.
+            </p>
+            <p className="text-center text-sm text-gray-500 mt-2">
+              Contacta con el administrador del sistema.
             </p>
           </CardContent>
         </Card>
