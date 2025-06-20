@@ -147,8 +147,8 @@ export function Sidebar() {
           isCollapsed ? "px-3 py-3 justify-center" : "px-2 py-3 2xl:py-3.5",
           "text-sm 2xl:text-base",
           isActive
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            ? "bg-brand text-white shadow-sm" // 🎨 Enlaces activos en verde corporativo
+            : "text-sidebar-foreground hover:bg-brand/10 hover:text-brand" // 🎨 Hover en verde corporativo
         )}
       >
         <Icon className={cn("flex-shrink-0", isCollapsed ? "h-5 w-5" : "mr-3 h-5 w-5")} />
@@ -182,7 +182,7 @@ export function Sidebar() {
         className={cn(
           "w-full flex items-center rounded-lg transition-all duration-200",
           isCollapsed ? "px-3 py-2.5 justify-center" : "px-2 py-2.5 2xl:py-3",
-          "text-sm 2xl:text-base text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          "text-sm 2xl:text-base text-sidebar-foreground hover:bg-brand/10 hover:text-brand" // 🎨 Hover en verde corporativo
         )}
         onClick={() => {
           // TODO: Implementar lógica de contacto/soporte
@@ -248,7 +248,7 @@ export function Sidebar() {
           size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
           className={cn(
-            "h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent",
+            "h-8 w-8 text-sidebar-foreground hover:bg-brand/10 hover:text-brand", // 🎨 Hover en verde corporativo
             isCollapsed && "h-10 w-10"
           )}
         >

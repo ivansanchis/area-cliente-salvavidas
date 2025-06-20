@@ -41,6 +41,12 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  
+  /* 🎨 COLORES CORPORATIVOS SALVAVIDAS CARDIO */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-light: var(--brand-light);
 }
 
 :root {
@@ -51,8 +57,11 @@
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
+  
+  /* 🎨 COLORES PRIMARIOS CAMBIADOS AL VERDE CORPORATIVO */
+  --primary: oklch(0.7376 0.0906 177.09); /* #65bda9 convertido a oklch */
+  --primary-foreground: oklch(1 0 0);
+  
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
@@ -62,7 +71,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --ring: oklch(0.7376 0.0906 177.09); /* Ring también en verde corporativo */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -70,12 +79,18 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.984 0.003 247.858);
   --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.7376 0.0906 177.09); /* Sidebar primary en verde */
+  --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.968 0.007 247.896);
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --sidebar-ring: oklch(0.7376 0.0906 177.09);
+  
+  /* 🎨 VARIABLES CORPORATIVAS SALVAVIDAS CARDIO */
+  --brand: #65bda9;
+  --brand-foreground: #ffffff;
+  --brand-hover: #5aa89c;
+  --brand-light: #e8f5f3;
 }
 
 .dark {
@@ -85,8 +100,11 @@
   --card-foreground: oklch(0.984 0.003 247.858);
   --popover: oklch(0.208 0.042 265.755);
   --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
+  
+  /* 🎨 MODO OSCURO TAMBIÉN CON VERDE CORPORATIVO */
+  --primary: oklch(0.7 0.15 165); /* Verde más claro para dark mode */
+  --primary-foreground: oklch(0.129 0.042 264.695);
+  
   --secondary: oklch(0.279 0.041 260.031);
   --secondary-foreground: oklch(0.984 0.003 247.858);
   --muted: oklch(0.279 0.041 260.031);
@@ -96,7 +114,7 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
+  --ring: oklch(0.7 0.15 165);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -104,12 +122,18 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.208 0.042 265.755);
   --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.7 0.15 165); /* Sidebar primary verde en dark */
+  --sidebar-primary-foreground: oklch(0.129 0.042 264.695);
   --sidebar-accent: oklch(0.279 0.041 260.031);
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --sidebar-ring: oklch(0.7 0.15 165);
+  
+  /* 🎨 VARIABLES CORPORATIVAS EN MODO OSCURO */
+  --brand: #7cc9b5;
+  --brand-foreground: #1a1a1a;
+  --brand-hover: #65bda9;
+  --brand-light: #2d4a44;
 }
 
 @layer base {
@@ -118,5 +142,24 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* 🎨 CLASES UTILITARIAS CORPORATIVAS */
+@layer utilities {
+  .bg-brand {
+    background-color: var(--brand);
+  }
+  .text-brand {
+    color: var(--brand);
+  }
+  .border-brand {
+    border-color: var(--brand);
+  }
+  .hover\:bg-brand:hover {
+    background-color: var(--brand-hover);
+  }
+  .bg-brand-light {
+    background-color: var(--brand-light);
   }
 }
