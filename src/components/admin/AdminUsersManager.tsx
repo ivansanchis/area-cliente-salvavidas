@@ -1,4 +1,4 @@
-// src/components/admin/AdminUsersManager.tsx - CONECTA BUSCADOR Y TABLA
+// src/components/admin/AdminUsersManager.tsx - INTERFAZ UNIFICADA
 
 "use client"
 
@@ -6,20 +6,46 @@ import { useState } from 'react'
 import UserSearch from './UserSearch'
 import UsersTable from './UsersTable'
 
+// ✅ INTERFAZ UNIFICADA que coincide con UsersTable y lo que devuelve Prisma
 interface User {
   id: string
   email: string
   nombre?: string | null
   apellidos?: string | null
   name?: string | null
+  role: string
   accessType: string
   accessId: string
   active: boolean
   canViewContratos: boolean
   canViewFormaciones: boolean
   canViewFacturas: boolean
-  grupo?: { nome: string } | null
-  empresa?: { nombreCliente: string } | null
+  createdAt: Date
+  updatedAt: Date
+  // ✅ CORREGIDO: tipos que coinciden exactamente con Prisma
+  grupo?: { 
+    id: string
+    nombre: string
+    idGrupo: string
+    numeroEquipos: number
+    numeroFormaciones: number
+    mrrTotal: number
+    cuotaMediaEquipo: number
+    createdAt: Date
+    updatedAt: Date
+  } | null
+  empresa?: { 
+    id: string
+    nombreCliente: string
+    idSage: string
+    idGrupo: string
+    numeroEquipos: number
+    numeroFormaciones: number
+    mrr: number
+    cuotaEquipo: number
+    createdAt: Date
+    updatedAt: Date
+  } | null
 }
 
 interface AdminUsersManagerProps {

@@ -24,20 +24,45 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 import { Pencil, Trash2, AlertTriangle, CheckCircle } from 'lucide-react'
 
+// ✅ INTERFAZ UNIFICADA que coincide con AdminUsersManager
 interface User {
   id: string
   email: string
   nombre?: string | null
   apellidos?: string | null
   name?: string | null
+  role: string
   accessType: string
   accessId: string
   active: boolean
   canViewContratos: boolean
   canViewFormaciones: boolean
   canViewFacturas: boolean
-  grupo?: { nombre: string } | null
-  empresa?: { nombreCliente: string } | null
+  createdAt: Date
+  updatedAt: Date
+  grupo?: { 
+    id: string
+    nombre: string
+    idGrupo: string
+    numeroEquipos: number
+    numeroFormaciones: number
+    mrrTotal: number
+    cuotaMediaEquipo: number
+    createdAt: Date
+    updatedAt: Date
+  } | null
+  empresa?: { 
+    id: string
+    nombreCliente: string
+    idSage: string
+    idGrupo: string
+    numeroEquipos: number
+    numeroFormaciones: number
+    mrr: number
+    cuotaEquipo: number
+    createdAt: Date
+    updatedAt: Date
+  } | null
 }
 
 interface UsersTableProps {

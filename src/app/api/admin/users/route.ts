@@ -183,17 +183,18 @@ export async function POST(request: NextRequest) {
     
     // Proporcionar más detalles del error
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorDetails = {
+    const errorDetails: any = {
       error: 'Error interno del servidor',
       details: errorMessage,
       timestamp: new Date().toISOString(),
-      // ✅ Agregar información específica si es error de Prisma
-      ...(error && typeof error === 'object' && 'code' in error && {
-        prismaError: {
-          code: (error as any).code,
-          meta: (error as any).meta
-        }
-      })
+    }
+    
+    // Agregar información específica si es error de Prisma
+    if (error && typeof error === 'object' && 'code' in error) {
+      errorDetails.prismaError = {
+        code: (error as any).code,
+        meta: (error as any).meta
+      }
     }
     
     return NextResponse.json(errorDetails, { status: 500 })

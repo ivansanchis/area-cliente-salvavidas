@@ -8,7 +8,7 @@ async function verifyAdminFromCookies() {
   try {
     console.log('🔍 Verifying admin from cookies...')
     
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     
     // Buscar cookie de sesión
     const sessionCookie = cookieStore.get('next-auth.session-token') || 

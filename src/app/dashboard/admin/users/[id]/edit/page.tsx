@@ -9,10 +9,11 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
+// ✅ CORREGIDO: params es ahora Promise en Next.js 15
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 async function getUserWithRelations(id: string) {
@@ -68,6 +69,9 @@ async function getDispositivos() {
 }
 
 export default async function EditUserPage({ params }: PageProps) {
+  // ✅ CORREGIDO: Await params
+  const { id } = await params
+  
   // Verificar que el usuario actual es admin
   const adminCheck = await verifyAdminFromCookies()
   if (!adminCheck.isAdmin) {
@@ -75,7 +79,7 @@ export default async function EditUserPage({ params }: PageProps) {
   }
 
   // Cargar datos del usuario a editar
-  const user = await getUserWithRelations(params.id)
+  const user = await getUserWithRelations(id)
   if (!user) {
     notFound()
   }

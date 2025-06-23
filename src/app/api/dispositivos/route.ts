@@ -8,8 +8,8 @@ export async function GET(request: NextRequest) {
     // ✅ USAR NextAuth directamente
     const session = await getServerSession(authOptions)
     
-    if (!session?.user) {
-      console.log('❌ No NextAuth session found')
+    if (!session?.user?.email) {
+      console.log('❌ No NextAuth session found or no email')
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 

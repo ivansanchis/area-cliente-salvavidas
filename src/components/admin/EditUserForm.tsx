@@ -19,7 +19,8 @@ interface User {
   name: string | null
   nombre: string | null
   apellidos: string | null
-  role: 'ADMIN' | 'GRUPO' | 'EMPRESA' | 'DISPOSITIVO'
+  // ✅ CORREGIDO: cambiar de union type a string para coincidir con Prisma
+  role: string
   accessType: string
   accessId: string
   grupoId: string | null
@@ -29,8 +30,30 @@ interface User {
   canViewFormaciones: boolean
   canViewFacturas: boolean
   active: boolean
-  grupo?: { idGrupo: string; nombre: string } | null
-  empresa?: { idSage: string; nombreCliente: string } | null
+  // ✅ CORREGIDO: tipos que coinciden con lo que devuelve Prisma
+  grupo?: { 
+    id: string
+    idGrupo: string
+    nombre: string
+    createdAt: Date
+    updatedAt: Date
+    numeroEquipos: number
+    numeroFormaciones: number
+    mrrTotal: number
+    cuotaMediaEquipo: number
+  } | null
+  empresa?: { 
+    id: string
+    idSage: string
+    nombreCliente: string
+    idGrupo: string
+    numeroEquipos: number
+    numeroFormaciones: number
+    mrr: number
+    cuotaEquipo: number
+    createdAt: Date
+    updatedAt: Date
+  } | null
 }
 
 interface Grupo {

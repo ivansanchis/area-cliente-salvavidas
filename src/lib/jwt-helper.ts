@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 
 export async function getSessionFromCookie() {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     
     // Intentar diferentes nombres de cookies que NextAuth puede usar
     const possibleCookieNames = [
